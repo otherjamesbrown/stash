@@ -71,12 +71,16 @@ stash init inventory --prefix inv-
 # Error: stash 'inventory' already exists
 
 # Invalid prefix (too short)
-stash init test --prefix x
-# Error: prefix must be 2-4 characters
+stash init test --prefix a-
+# Error: prefix must be 3-5 characters (2-4 letters + dash)
 
 # Invalid prefix (too long)
 stash init test --prefix toolong-
-# Error: prefix must be 2-4 characters
+# Error: prefix must be 3-5 characters (2-4 letters + dash)
+
+# Invalid prefix (no dash)
+stash init test --prefix inv
+# Error: prefix must end with dash
 ```
 
 ---

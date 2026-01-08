@@ -114,7 +114,7 @@ usecases:
         when: User runs `stash init test --prefix x` (too short)
         then:
           - Command fails with exit code 2
-          - Error message explains prefix requirements (2-4 chars)
+          - Error message explains prefix requirements (3-5 chars: 2-4 letters + dash)
           - No files are created
 
       - id: AC-04
@@ -1293,23 +1293,29 @@ Every use case must include tests for edge cases and failure scenarios. These ar
 ```go
 func TestUC_ST_EdgeCases(t *testing.T) {
     // EC-ST-001: Initialize with boundary prefix lengths
-    t.Run("prefix exactly 2 chars", func(t *testing.T) {
+    // Valid: 3-5 chars total (2-4 letters + dash)
+    t.Run("prefix min valid (ab- = 3 chars)", func(t *testing.T) {
         _, _, err := runStash("init", "test", "--prefix", "ab-")
         require.NoError(t, err) // Should succeed
     })
 
-    t.Run("prefix exactly 4 chars", func(t *testing.T) {
+    t.Run("prefix max valid (abcd- = 5 chars)", func(t *testing.T) {
         _, _, err := runStash("init", "test", "--prefix", "abcd-")
         require.NoError(t, err) // Should succeed
     })
 
-    t.Run("prefix 1 char - too short", func(t *testing.T) {
+    t.Run("prefix too short (a- = 2 chars)", func(t *testing.T) {
         _, _, err := runStash("init", "test", "--prefix", "a-")
         require.Error(t, err)
     })
 
-    t.Run("prefix 5 chars - too long", func(t *testing.T) {
+    t.Run("prefix too long (abcde- = 6 chars)", func(t *testing.T) {
         _, _, err := runStash("init", "test", "--prefix", "abcde-")
+        require.Error(t, err)
+    })
+
+    t.Run("prefix missing dash", func(t *testing.T) {
+        _, _, err := runStash("init", "test", "--prefix", "inv")
         require.Error(t, err)
     })
 
@@ -1439,11 +1445,12 @@ func TestUC_COL_EdgeCases(t *testing.T) {
     })
 
     // EC-COL-004: Case sensitivity
-    t.Run("column names are case sensitive", func(t *testing.T) {
+    t.Run("column names are case insensitive", func(t *testing.T) {
         setup := setupStash(t, "test", "ts-")
         runStash("column", "add", "Name")
-        _, _, err := runStash("column", "add", "name")
-        // Depends on design: could allow both or reject as duplicate
+        _, stderr, err := runStash("column", "add", "name")
+        require.Error(t, err) // Case-insensitive: rejected as duplicate
+        assert.Contains(t, stderr, "already exists")
     })
 
     // EC-COL-005: Description edge cases
@@ -1494,18 +1501,30 @@ func TestUC_COL_EdgeCases(t *testing.T) {
 ```go
 func TestUC_REC_EdgeCases(t *testing.T) {
     // EC-REC-001: Empty and whitespace values
-    t.Run("add record with empty value", func(t *testing.T) {
+    t.Run("add record with empty value - rejected", func(t *testing.T) {
         setup := setupStash(t, "test", "ts-")
         runStash("column", "add", "Name")
-        _, _, err := runStash("add", "")
-        // Design decision: allow or reject?
+        _, stderr, err := runStash("add", "")
+        require.Error(t, err) // Empty values rejected for 'add'
+        assert.Contains(t, stderr, "empty")
     })
 
-    t.Run("add record with only whitespace", func(t *testing.T) {
+    t.Run("add record with only whitespace - rejected", func(t *testing.T) {
         setup := setupStash(t, "test", "ts-")
         runStash("column", "add", "Name")
-        _, _, err := runStash("add", "   ")
-        // Design decision: trim and reject, or allow?
+        _, stderr, err := runStash("add", "   ")
+        require.Error(t, err) // Whitespace trimmed, then rejected as empty
+        assert.Contains(t, stderr, "empty")
+    })
+
+    t.Run("set field to empty value - allowed", func(t *testing.T) {
+        setup := setupStash(t, "test", "ts-")
+        runStash("column", "add", "Name", "Notes")
+        out, _, _ := runStash("add", "Test")
+        id := strings.TrimSpace(out)
+
+        _, _, err := runStash("set", id, "Notes", "")
+        require.NoError(t, err) // Empty values allowed for 'set' (to clear fields)
     })
 
     // EC-REC-002: Very long values
@@ -1960,7 +1979,11 @@ Product A,100
 Product B
 Product C,200,Extra
 `)
-        // Design decision: fail, or handle gracefully?
+        _, stderr, err := runStash("import", "test.csv", "--confirm")
+        // Rows with fewer columns: missing values treated as empty
+        // Rows with extra columns: extra values ignored with warning
+        require.NoError(t, err)
+        assert.Contains(t, stderr, "warning") // Warn about inconsistent rows
     })
 
     // EC-IMP-002: Empty CSV

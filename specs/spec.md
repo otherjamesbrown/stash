@@ -1,6 +1,6 @@
 # Stash: Technical Specification
 
-**Version:** 2.1.0
+**Version:** 2.2.0
 **Language:** Go
 **Concept:** A record-centric structured data store for AI agents
 
@@ -46,6 +46,31 @@ Stash can track any structured data:
 - **Content**: Articles, bookmarks, notes, sources
 - **Projects**: Tasks, milestones, deliverables
 - **Entities**: People, places, organizations
+
+### Design Decisions
+
+These decisions govern edge case behavior throughout the system:
+
+| Decision | Choice | Behavior |
+|----------|--------|----------|
+| **Column name case** | Case-insensitive | `Name` and `name` are the same column. First definition wins for display. |
+| **Empty values** | Hybrid | `stash add ""` rejected; `stash set <id> <col> ""` allowed (to clear fields). |
+| **Whitespace** | Trim silently | Leading/trailing whitespace stripped. `"  Laptop  "` → `"Laptop"`. |
+| **Prefix format** | User provides full | `--prefix inv-` required (with dash). Validated as 3-5 chars (2-4 letters + dash). |
+| **Hierarchy depth** | Unlimited | No maximum nesting depth. IDs like `inv-a.1.2.3.4.5` are valid. |
+
+**Case-insensitivity details:**
+- Column names stored with original case (first definition)
+- Lookups and comparisons use case-insensitive matching
+- `stash column add Name` then `stash column add name` → error: "column 'Name' already exists"
+- `stash set inv-ex4j name "value"` updates column `Name`
+- SQLite queries use `COLLATE NOCASE` for column matching
+
+**Prefix validation:**
+- Must be 3-5 characters total (2-4 letters + trailing dash)
+- Must end with `-`
+- Valid: `ab-`, `inv-`, `abcd-`
+- Invalid: `a-` (too short), `abcde-` (too long), `inv` (no dash)
 
 ---
 
@@ -301,7 +326,7 @@ stash init contacts --prefix ct-
 stash init bookmarks --prefix bk-
 
 # Flags
---prefix <p>    Required. 2-4 char prefix for IDs
+--prefix <p>    Required. 3-5 chars total (2-4 letters + dash, e.g., inv-, abcd-)
 --no-daemon     Don't auto-start daemon
 ```
 
