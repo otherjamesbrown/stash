@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "Widget A",
+    "Category": "Parts",
+    "Price": "10.99",
+    "InStock": "true"
+  },
+  {
+    "Name": "Widget B",
+    "Category": "Parts",
+    "Price": "15.99",
+    "InStock": "true"
+  },
+  {
+    "Name": "Gadget X",
+    "Category": "Devices",
+    "Price": "99.99",
+    "InStock": "false"
+  },
+  {
+    "Name": "Gadget Y",
+    "Category": "Devices",
+    "Price": "149.99",
+    "InStock": "true"
+  },
+  {
+    "Name": "Tool Z",
+    "Category": "Tools",
+    "Price": "24.99",
+    "InStock": "true"
+  }
+]

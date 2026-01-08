@@ -1,0 +1,148 @@
+feature: Import/Export
+description: |
+  Operations for bulk importing and exporting records.
+
+dependencies:
+  - usecases/stash.yaml
+  - usecases/columns.yaml
+
+usecases:
+  - id: UC-IMP-001
+    title: Import from CSV
+    interface: cli
+    status: active
+
+    description: |
+      User wants to bulk import records from a CSV file.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+      - CSV file exists and is readable
+
+    depends_on:
+      - UC-ST-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Interactive import
+        given: CSV file with Name, Category, Price columns exists
+        when: User runs `stash import products.csv`
+        then:
+          - Column preview with sample data is shown
+          - Prompts for confirmation
+          - Creates missing columns
+          - Imports all records
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Skip confirmation
+        given: CSV file exists
+        when: User runs `stash import products.csv --confirm`
+        then:
+          - Import proceeds without prompting
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Dry run preview
+        given: CSV file exists
+        when: User runs `stash import products.csv --dry-run`
+        then:
+          - Shows what would be imported
+          - No records are created
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Specify primary column
+        given: CSV has columns ProductName, Price
+        when: User runs `stash import products.csv --column ProductName`
+        then:
+          - ProductName is used as primary column
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Handle missing values
+        given: CSV has rows with empty cells
+        when: User runs `stash import products.csv --confirm`
+        then:
+          - Empty cells are imported as null/empty
+          - Records are created successfully
+          - Exit code is 0
+
+    in_scope:
+      - Parsing CSV with headers
+      - Creating missing columns
+      - Importing records
+      - Column preview
+      - Dry run mode
+
+    out_of_scope:
+      - Non-CSV formats (JSON import future)
+      - Updating existing records
+
+    must_not:
+      - Import without confirmation (unless --confirm)
+      - Fail silently on parse errors
+
+  - id: UC-IMP-002
+    title: Export to File
+    interface: cli
+    status: active
+
+    description: |
+      User wants to export records to CSV or JSON file.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with records
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Export all to CSV
+        given: Stash has records
+        when: User runs `stash export products.csv`
+        then:
+          - CSV file is created with headers
+          - All active records are exported
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Export to JSON
+        given: Stash has records
+        when: User runs `stash export products.json --format json`
+        then:
+          - JSON file is created
+          - Contains array of records
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Filtered export
+        given: Stash has records with various Categories
+        when: User runs `stash export electronics.csv --where "Category = 'electronics'"`
+        then:
+          - Only matching records are exported
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Include deleted records
+        given: Stash has active and deleted records
+        when: User runs `stash export all.csv --include-deleted`
+        then:
+          - Both active and deleted records are exported
+          - Exit code is 0
+
+    in_scope:
+      - CSV export
+      - JSON export
+      - Filtering with WHERE
+      - Including deleted records
+
+    out_of_scope:
+      - Excel format
+      - Custom field mapping
+
+    must_not:
+      - Overwrite without warning (if file exists)
+      - Export system fields unless requested

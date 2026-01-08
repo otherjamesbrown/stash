@@ -1,0 +1,511 @@
+feature: Record Operations
+description: |
+  CRUD operations for records within a stash. Records have system fields
+  (_id, _hash, _created_at, etc.) and user-defined columns.
+
+dependencies:
+  - usecases/stash.yaml
+  - usecases/columns.yaml
+
+usecases:
+  - id: UC-REC-001
+    title: Add Record
+    interface: cli
+    status: active
+
+    description: |
+      User wants to create a new record in a stash. The record gets
+      a unique ID, hash, and audit fields automatically.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+      - At least one column is defined
+
+    depends_on:
+      - UC-ST-001
+      - UC-COL-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Add record with primary value
+        given: Stash "inventory" exists with column "Name"
+        when: User runs `stash add "Laptop"`
+        then:
+          - Record is created with unique ID (inv-xxxx)
+          - Name field is set to "Laptop"
+          - _hash is calculated from user fields
+          - _created_at and _updated_at are set to now
+          - _created_by and _updated_by are set to current actor
+          - _branch is set to current git branch
+          - ID is output to stdout
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Add record with additional fields
+        given: Stash "inventory" exists with columns "Name", "Price", "Category"
+        when: User runs `stash add "Laptop" --set Price 999 --set Category "electronics"`
+        then:
+          - Record is created with all three fields set
+          - ID is output to stdout
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Add child record
+        given: Record inv-ex4j exists in "inventory"
+        when: User runs `stash add "Charger" --parent inv-ex4j`
+        then:
+          - Child record is created with ID inv-ex4j.1
+          - _parent field is set to inv-ex4j
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Reject invalid parent
+        given: No record inv-fake exists
+        when: User runs `stash add "Charger" --parent inv-fake`
+        then:
+          - Command fails with exit code 4
+          - Error message indicates parent not found
+          - No record is created
+
+      - id: AC-05
+        criterion: JSON output format
+        given: Stash "inventory" exists with column "Name"
+        when: User runs `stash add "Laptop" --json`
+        then:
+          - Output is valid JSON object
+          - Contains _id, _hash, _created_by, _branch, Name
+
+      - id: AC-06
+        criterion: Reject empty primary value
+        given: Stash "inventory" exists with column "Name"
+        when: User runs `stash add ""`
+        then:
+          - Command fails with appropriate error
+          - No record is created
+
+      - id: AC-07
+        criterion: Trim whitespace from values
+        given: Stash "inventory" exists with column "Name"
+        when: User runs `stash add "  Laptop  "`
+        then:
+          - Record is created with Name = "Laptop" (trimmed)
+          - Exit code is 0
+
+    in_scope:
+      - Creating record with ID
+      - Setting primary value to first column
+      - Setting additional fields via --set
+      - Creating child records with --parent
+      - Calculating hash
+      - Capturing audit fields
+
+    out_of_scope:
+      - Bulk import (see UC-IMP-001)
+      - Updating existing records (see UC-REC-002)
+
+    must_not:
+      - Create record without at least one column defined
+      - Allow duplicate IDs
+      - Create child without valid parent
+      - Accept empty primary value
+
+  - id: UC-REC-002
+    title: Update Record Field
+    interface: cli
+    status: active
+
+    description: |
+      User wants to update one or more fields on an existing record.
+      This updates the hash and audit trail.
+
+    actor: User
+
+    preconditions:
+      - Record exists and is not deleted
+      - Column exists in schema
+
+    depends_on:
+      - UC-REC-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Update single field
+        given: Record inv-ex4j exists with Name="Laptop"
+        when: User runs `stash set inv-ex4j Price 1299`
+        then:
+          - Price field is set to 1299
+          - _hash is recalculated
+          - _updated_at is set to now
+          - _updated_by is set to current actor
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Update multiple fields
+        given: Record inv-ex4j exists
+        when: User runs `stash set inv-ex4j --col Price 1299 --col Stock 50`
+        then:
+          - Both fields are updated
+          - Single JSONL entry is appended (not two)
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Reject non-existent record
+        given: No record inv-fake exists
+        when: User runs `stash set inv-fake Price 100`
+        then:
+          - Command fails with exit code 4
+          - Error message indicates record not found
+
+      - id: AC-04
+        criterion: Reject non-existent column
+        given: Record inv-ex4j exists, no column "FakeCol"
+        when: User runs `stash set inv-ex4j FakeCol "value"`
+        then:
+          - Command fails with exit code 1
+          - Error message indicates column not found
+          - Record is not modified
+
+      - id: AC-05
+        criterion: Reject update to deleted record
+        given: Record inv-ex4j is soft-deleted
+        when: User runs `stash set inv-ex4j Price 100`
+        then:
+          - Command fails with appropriate error
+          - Suggests using `stash restore` first
+
+      - id: AC-06
+        criterion: Allow empty value to clear field
+        given: Record inv-ex4j exists with Notes="something"
+        when: User runs `stash set inv-ex4j Notes ""`
+        then:
+          - Notes field is cleared (set to empty)
+          - Exit code is 0
+
+    in_scope:
+      - Updating single field
+      - Updating multiple fields atomically
+      - Recalculating hash
+      - Updating audit trail
+
+    out_of_scope:
+      - Creating new records (see UC-REC-001)
+      - Adding new columns (see UC-COL-001)
+
+    must_not:
+      - Allow update to non-existent column
+      - Allow update to deleted record
+      - Create multiple JSONL entries for single set command
+
+  - id: UC-REC-003
+    title: Show Record
+    interface: cli
+    status: active
+
+    description: |
+      User wants to view a single record with all fields and metadata.
+
+    actor: User
+
+    preconditions:
+      - Record exists
+
+    depends_on:
+      - UC-REC-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Show record details
+        given: Record inv-ex4j exists with fields
+        when: User runs `stash show inv-ex4j`
+        then:
+          - Output shows record ID and hash
+          - Output shows parent (if any)
+          - Output shows created/updated timestamps and actors
+          - Output shows all user fields
+          - Output lists children (if any)
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: JSON output format
+        given: Record inv-ex4j exists
+        when: User runs `stash show inv-ex4j --json`
+        then:
+          - Output is valid JSON object
+          - Contains all system and user fields
+          - Contains _children array
+
+      - id: AC-03
+        criterion: Show with file contents
+        given: Record inv-ex4j has attached file
+        when: User runs `stash show inv-ex4j --with-files`
+        then:
+          - Output includes inline file contents
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Show with history
+        given: Record inv-ex4j has been updated multiple times
+        when: User runs `stash show inv-ex4j --history`
+        then:
+          - Output includes change history
+          - Shows timestamp, operation, actor, branch for each change
+
+    in_scope:
+      - Displaying all record fields
+      - Showing metadata (hash, timestamps, actors)
+      - Listing children
+      - Including file contents
+      - Showing change history
+
+    out_of_scope:
+      - Modifying record (see UC-REC-002)
+
+    must_not:
+      - Modify any data
+
+  - id: UC-REC-004
+    title: Attach File
+    interface: cli
+    status: active
+
+    description: |
+      User wants to create or attach a markdown file to a record.
+
+    actor: User
+
+    preconditions:
+      - Record exists and is not deleted
+      - Column exists
+
+    depends_on:
+      - UC-REC-001
+      - UC-COL-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Create file with inline content
+        given: Record inv-ex4j exists with column "Description"
+        when: User runs `stash file inv-ex4j Description --content "# Title\n\nContent"`
+        then:
+          - File is created at .stash/inventory/files/inv-ex4j.md
+          - Description field is set to "inv-ex4j.md"
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Create file from existing file
+        given: Record inv-ex4j exists, ./docs/spec.md exists
+        when: User runs `stash file inv-ex4j Description --from ./docs/spec.md`
+        then:
+          - Content is copied to .stash/inventory/files/inv-ex4j.md
+          - Description field is set to "inv-ex4j.md"
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: File naming for children
+        given: Child record inv-ex4j.1 exists
+        when: User runs `stash file inv-ex4j.1 Description --content "..."`
+        then:
+          - File is created at .stash/inventory/files/inv-ex4j.1.md
+          - Exit code is 0
+
+    in_scope:
+      - Creating markdown files
+      - Copying from existing files
+      - Updating column reference
+
+    out_of_scope:
+      - Non-markdown files
+      - File versioning
+
+    must_not:
+      - Overwrite without warning (if file exists)
+      - Create file for deleted record
+
+  - id: UC-REC-005
+    title: Delete Record (Soft)
+    interface: cli
+    status: active
+
+    description: |
+      User wants to soft-delete a record. The record remains in the
+      database but is marked as deleted and excluded from normal queries.
+
+    actor: User
+
+    preconditions:
+      - Record exists and is not already deleted
+
+    depends_on:
+      - UC-REC-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Soft-delete record
+        given: Record inv-ex4j exists and is active
+        when: User runs `stash delete inv-ex4j`
+        then:
+          - _deleted_at is set to now
+          - _deleted_by is set to current actor
+          - Record is excluded from `stash list`
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Delete with cascade
+        given: Record inv-ex4j has children inv-ex4j.1 and inv-ex4j.2
+        when: User runs `stash delete inv-ex4j --cascade`
+        then:
+          - Parent and all children are soft-deleted
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Reject delete without cascade when children exist
+        given: Record inv-ex4j has children
+        when: User runs `stash delete inv-ex4j` (no --cascade)
+        then:
+          - Command fails with appropriate error
+          - Suggests using --cascade
+          - No records are deleted
+
+      - id: AC-04
+        criterion: Skip confirmation with --yes
+        given: Record inv-ex4j exists
+        when: User runs `stash delete inv-ex4j --yes`
+        then:
+          - Record is deleted without prompting
+          - Exit code is 0
+
+    in_scope:
+      - Setting _deleted_at and _deleted_by
+      - Cascade delete of children
+      - Confirmation prompt
+
+    out_of_scope:
+      - Permanent deletion (see UC-REC-007)
+      - Restoring deleted records (see UC-REC-006)
+
+    must_not:
+      - Permanently remove data
+      - Delete children without --cascade flag
+
+  - id: UC-REC-006
+    title: Restore Deleted Record
+    interface: cli
+    status: active
+
+    description: |
+      User wants to restore a soft-deleted record, making it active again.
+
+    actor: User
+
+    preconditions:
+      - Record exists and is soft-deleted
+
+    depends_on:
+      - UC-REC-005
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Restore deleted record
+        given: Record inv-ex4j is soft-deleted
+        when: User runs `stash restore inv-ex4j`
+        then:
+          - _deleted_at is set to null
+          - _deleted_by is set to null
+          - _updated_at and _updated_by are updated
+          - Record appears in `stash list`
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Restore with cascade
+        given: Record inv-ex4j and children are soft-deleted
+        when: User runs `stash restore inv-ex4j --cascade`
+        then:
+          - Parent and all deleted children are restored
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Reject restore of active record
+        given: Record inv-ex4j is active (not deleted)
+        when: User runs `stash restore inv-ex4j`
+        then:
+          - Command fails or is no-op
+          - Appropriate message shown
+
+    in_scope:
+      - Clearing _deleted_at and _deleted_by
+      - Cascade restore of children
+      - Updating audit trail
+
+    out_of_scope:
+      - Restoring purged records (impossible)
+
+    must_not:
+      - Restore records that were permanently purged
+
+  - id: UC-REC-007
+    title: Purge Deleted Records
+    interface: cli
+    status: active
+
+    description: |
+      User wants to permanently remove soft-deleted records.
+      This is irreversible and removes data from JSONL.
+
+    actor: User
+
+    preconditions:
+      - Soft-deleted records exist
+
+    depends_on:
+      - UC-REC-005
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Purge by age
+        given: Records deleted more than 30 days ago exist
+        when: User runs `stash purge --before 30d --yes`
+        then:
+          - Records deleted > 30 days ago are permanently removed
+          - JSONL entries are removed
+          - Associated files in files/ are deleted
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Purge specific record
+        given: Record inv-ex4j is soft-deleted
+        when: User runs `stash purge --id inv-ex4j --yes`
+        then:
+          - Only that record is permanently removed
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Dry run preview
+        given: Soft-deleted records exist
+        when: User runs `stash purge --before 30d --dry-run`
+        then:
+          - Output lists records that would be purged
+          - No records are actually removed
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Require confirmation
+        given: Soft-deleted records exist
+        when: User runs `stash purge --all` (no --yes)
+        then:
+          - Confirmation prompt is shown
+          - No action without confirmation
+
+    in_scope:
+      - Permanently removing JSONL entries
+      - Removing associated files
+      - Filtering by age or ID
+      - Dry run preview
+
+    out_of_scope:
+      - Recovering purged records (impossible)
+
+    must_not:
+      - Purge without confirmation (unless --yes)
+      - Purge active (non-deleted) records

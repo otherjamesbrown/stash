@@ -1,0 +1,398 @@
+feature: Sync and Maintenance
+description: |
+  Operations for synchronization, health checks, and daemon management.
+
+dependencies:
+  - usecases/stash.yaml
+
+usecases:
+  - id: UC-SYN-001
+    title: Sync JSONL and SQLite
+    interface: cli
+    status: active
+
+    description: |
+      User wants to ensure JSONL and SQLite cache are synchronized.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Check sync status
+        given: Stash exists
+        when: User runs `stash sync --status`
+        then:
+          - Shows sync state for each stash
+          - Shows pending changes count
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Normal sync
+        given: Pending changes exist
+        when: User runs `stash sync`
+        then:
+          - Changes are synchronized
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Full rebuild from JSONL
+        given: SQLite cache may be outdated
+        when: User runs `stash sync --rebuild`
+        then:
+          - SQLite is rebuilt from JSONL
+          - All records are verified
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Flush DB changes to JSONL
+        given: DB has pending changes
+        when: User runs `stash sync --flush`
+        then:
+          - DB changes are written to JSONL
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Pull from main branch
+        given: Working in a worktree
+        when: User runs `stash sync --from-main`
+        then:
+          - JSONL changes from main are pulled
+          - Local cache is updated
+          - Exit code is 0
+
+    in_scope:
+      - JSONL to SQLite sync
+      - SQLite to JSONL flush
+      - Full rebuild
+      - Cross-branch sync
+
+    out_of_scope:
+      - Conflict resolution (future)
+
+    must_not:
+      - Lose data during sync
+
+  - id: UC-SYN-002
+    title: Health Check (Doctor)
+    interface: cli
+    status: active
+
+    description: |
+      User wants to diagnose and optionally fix issues.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Basic health check
+        given: Stash exists
+        when: User runs `stash doctor`
+        then:
+          - Checks daemon status
+          - Checks cache validity
+          - Checks JSONL/SQLite consistency
+          - Reports warnings and errors
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Auto-fix issues
+        given: Fixable issues exist
+        when: User runs `stash doctor --fix --yes`
+        then:
+          - Issues are automatically repaired
+          - Summary of fixes shown
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Deep check with hash verification
+        given: Stash has records
+        when: User runs `stash doctor --deep`
+        then:
+          - All record hashes are verified
+          - Hash mismatches are reported
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: JSON output
+        given: Stash exists
+        when: User runs `stash doctor --json`
+        then:
+          - Output is valid JSON
+          - Contains checks array with results
+          - Exit code is 0
+
+    in_scope:
+      - Daemon health
+      - Cache consistency
+      - File reference validation
+      - Hierarchy integrity
+      - Hash verification
+      - Column description warnings
+
+    out_of_scope:
+      - Network checks
+      - Git state checks
+
+    must_not:
+      - Modify data without --fix flag
+      - Fix without confirmation (unless --yes)
+
+  - id: UC-SYN-003
+    title: Emergency Repair
+    interface: cli
+    status: active
+
+    description: |
+      User wants to recover from data corruption.
+
+    actor: User
+
+    preconditions:
+      - Stash exists (possibly corrupted)
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Dry run preview
+        given: Corruption exists
+        when: User runs `stash repair --dry-run`
+        then:
+          - Shows what would be repaired
+          - No changes made
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Rebuild from JSONL
+        given: SQLite is corrupted
+        when: User runs `stash repair --source jsonl`
+        then:
+          - SQLite is rebuilt from JSONL
+          - Data integrity is restored
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Rebuild JSONL from DB
+        given: JSONL is corrupted but DB is good
+        when: User runs `stash repair --source db`
+        then:
+          - JSONL is rebuilt from SQLite
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Clean orphaned files
+        given: Orphaned files exist in files/
+        when: User runs `stash repair --clean-orphans`
+        then:
+          - Orphaned files are removed
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Rehash all records
+        given: Hash mismatches exist
+        when: User runs `stash repair --rehash`
+        then:
+          - All record hashes are recalculated
+          - Exit code is 0
+
+    in_scope:
+      - Rebuilding SQLite from JSONL
+      - Rebuilding JSONL from SQLite
+      - Cleaning orphaned files
+      - Rehashing records
+
+    out_of_scope:
+      - Recovering deleted JSONL data
+      - Merge conflict resolution
+
+    must_not:
+      - Make changes without confirmation
+      - Delete non-orphaned files
+
+  - id: UC-DMN-001
+    title: Start Daemon
+    interface: cli
+    status: active
+
+    description: |
+      User wants to start the background sync daemon.
+
+    actor: User
+
+    preconditions:
+      - .stash directory exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Start daemon
+        given: Daemon is not running
+        when: User runs `stash daemon start`
+        then:
+          - Daemon process is started
+          - PID is written to daemon.pid
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Already running
+        given: Daemon is already running
+        when: User runs `stash daemon start`
+        then:
+          - No error (idempotent)
+          - Message indicates already running
+          - Exit code is 0
+
+    in_scope:
+      - Starting daemon process
+      - Writing PID file
+      - Idempotent behavior
+
+    out_of_scope:
+      - Auto-restart on crash
+
+    must_not:
+      - Start multiple daemon instances
+
+  - id: UC-DMN-002
+    title: Stop Daemon
+    interface: cli
+    status: active
+
+    description: |
+      User wants to stop the daemon gracefully.
+
+    actor: User
+
+    preconditions:
+      - Daemon may or may not be running
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Stop running daemon
+        given: Daemon is running
+        when: User runs `stash daemon stop`
+        then:
+          - Daemon process is stopped
+          - PID file is removed
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Already stopped
+        given: Daemon is not running
+        when: User runs `stash daemon stop`
+        then:
+          - No error (idempotent)
+          - Exit code is 0
+
+    in_scope:
+      - Graceful shutdown
+      - Cleanup PID file
+
+    out_of_scope:
+      - Force kill
+
+    must_not:
+      - Leave orphaned PID file
+
+  - id: UC-DMN-003
+    title: Restart Daemon
+    interface: cli
+    status: active
+
+    description: |
+      User wants to restart the daemon.
+
+    actor: User
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Restart daemon
+        given: Daemon is running
+        when: User runs `stash daemon restart`
+        then:
+          - Daemon is stopped then started
+          - New PID is assigned
+          - Exit code is 0
+
+    in_scope:
+      - Stop + start sequence
+
+    out_of_scope:
+      - Hot reload
+
+    must_not:
+      - Leave daemon in stopped state on failure
+
+  - id: UC-DMN-004
+    title: Check Daemon Status
+    interface: cli
+    status: active
+
+    description: |
+      User wants to view daemon health.
+
+    actor: User
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Show status when running
+        given: Daemon is running
+        when: User runs `stash daemon status`
+        then:
+          - Shows PID
+          - Shows uptime
+          - Shows last sync time
+          - Shows watched stashes count
+          - Shows memory usage
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Show status when stopped
+        given: Daemon is not running
+        when: User runs `stash daemon status`
+        then:
+          - Shows "not running"
+          - Exit code is 0
+
+    in_scope:
+      - PID and uptime
+      - Sync status
+      - Resource usage
+
+    out_of_scope:
+      - Historical metrics
+
+    must_not:
+      - Fail if daemon not running
+
+  - id: UC-DMN-005
+    title: View Daemon Logs
+    interface: cli
+    status: active
+
+    description: |
+      User wants to debug daemon issues by viewing logs.
+
+    actor: User
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Tail log file
+        given: Daemon has been running
+        when: User runs `stash daemon logs`
+        then:
+          - Recent log entries are shown
+          - Exit code is 0
+
+    in_scope:
+      - Tailing daemon.log
+
+    out_of_scope:
+      - Log filtering
+      - Log rotation management
+
+    must_not:
+      - Fail if log file doesn't exist

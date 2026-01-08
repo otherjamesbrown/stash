@@ -1,0 +1,273 @@
+feature: Column Management
+description: |
+  Schema operations for managing columns within a stash. Columns define
+  the structure of records and include descriptions to help agents.
+
+dependencies:
+  - usecases/stash.yaml
+
+usecases:
+  - id: UC-COL-001
+    title: Add Column
+    interface: cli
+    status: active
+
+    description: |
+      User wants to add one or more columns to a stash schema.
+      Columns can have descriptions to help agents understand their purpose.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    depends_on:
+      - UC-ST-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Add single column
+        given: Stash "inventory" exists with no columns
+        when: User runs `stash column add Name`
+        then:
+          - Column "Name" is added to config.json
+          - Column has added timestamp and added_by
+          - SQLite table is altered to add column
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Add multiple columns
+        given: Stash "inventory" exists
+        when: User runs `stash column add Name Price Category`
+        then:
+          - All three columns are added
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Add column with description
+        given: Stash "inventory" exists
+        when: User runs `stash column add Price --desc "Price in USD"`
+        then:
+          - Column "Price" is added with description
+          - Description appears in `stash column list`
+
+      - id: AC-04
+        criterion: Reject duplicate column
+        given: Column "Name" already exists
+        when: User runs `stash column add Name`
+        then:
+          - Command fails with appropriate error
+          - No duplicate column created
+
+      - id: AC-05
+        criterion: Reject reserved names
+        given: Stash "inventory" exists
+        when: User runs `stash column add _id`
+        then:
+          - Command fails with exit code 2
+          - Error explains reserved column names
+
+      - id: AC-06
+        criterion: Case-insensitive duplicate detection
+        given: Column "Name" already exists
+        when: User runs `stash column add name`
+        then:
+          - Command fails with error "column 'Name' already exists"
+          - No duplicate column created
+
+    in_scope:
+      - Adding columns to config.json
+      - Adding columns to SQLite via ALTER TABLE
+      - Setting descriptions
+      - Tracking who added column
+
+    out_of_scope:
+      - Column types (future v2)
+      - Column validation rules (future v2)
+
+    must_not:
+      - Allow duplicate column names (case-insensitive)
+      - Allow reserved names (_id, _hash, _created_at, etc.)
+      - Allow invalid characters in column names
+
+  - id: UC-COL-002
+    title: List Columns
+    interface: cli
+    status: active
+
+    description: |
+      User wants to see all columns in a stash with their descriptions
+      and population statistics.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: List columns with stats
+        given: Stash has columns Name (100 populated), Price (75 populated)
+        when: User runs `stash column list`
+        then:
+          - Output shows column names
+          - Output shows descriptions
+          - Output shows populated count
+          - Output shows empty count
+
+      - id: AC-02
+        criterion: JSON output format
+        given: Stash has columns
+        when: User runs `stash column list --json`
+        then:
+          - Output is valid JSON array
+          - Each entry has name, desc, populated, empty
+
+    in_scope:
+      - Listing column names and descriptions
+      - Population statistics
+      - JSON output format
+
+    out_of_scope:
+      - Modifying columns (see UC-COL-003, UC-COL-004)
+
+    must_not:
+      - Include system columns in list
+
+  - id: UC-COL-003
+    title: Describe Column
+    interface: cli
+    status: active
+
+    description: |
+      User wants to set or update a column description.
+
+    actor: User
+
+    preconditions:
+      - Column exists
+
+    depends_on:
+      - UC-COL-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Set description
+        given: Column "Price" exists without description
+        when: User runs `stash column describe Price "Price in USD"`
+        then:
+          - Description is set in config.json
+          - Description appears in `stash column list`
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Update existing description
+        given: Column "Price" has description "Cost"
+        when: User runs `stash column describe Price "Price in USD, excluding tax"`
+        then:
+          - Description is updated
+          - Exit code is 0
+
+    in_scope:
+      - Setting column description
+      - Updating column description
+
+    out_of_scope:
+      - Renaming columns (see UC-COL-004)
+
+    must_not:
+      - Modify column data
+
+  - id: UC-COL-004
+    title: Rename Column
+    interface: cli
+    status: active
+
+    description: |
+      User wants to rename a column. Data is preserved.
+
+    actor: User
+
+    preconditions:
+      - Column exists
+      - New name doesn't exist
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Rename column
+        given: Column "Cost" exists with data
+        when: User runs `stash column rename Cost Price`
+        then:
+          - Column is renamed in config.json
+          - Column is renamed in SQLite
+          - Existing data is preserved
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Reject rename to existing name
+        given: Columns "Name" and "Title" both exist
+        when: User runs `stash column rename Title Name`
+        then:
+          - Command fails with appropriate error
+          - No changes made
+
+    in_scope:
+      - Renaming in config.json
+      - Renaming in SQLite
+      - Preserving data
+
+    out_of_scope:
+      - Merging columns
+      - Renaming system columns
+
+    must_not:
+      - Lose data during rename
+      - Allow rename to existing column name
+
+  - id: UC-COL-005
+    title: Drop Column
+    interface: cli
+    status: active
+
+    description: |
+      User wants to remove a column from the schema.
+      Data is preserved in JSONL history but no longer queryable.
+
+    actor: User
+
+    preconditions:
+      - Column exists
+
+    depends_on:
+      - UC-COL-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Drop column with confirmation
+        given: Column "OldField" exists with data
+        when: User runs `stash column drop OldField` and confirms
+        then:
+          - Column is removed from config.json
+          - Column is removed from SQLite schema
+          - Data preserved in JSONL history
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Skip confirmation with --yes
+        given: Column "OldField" exists
+        when: User runs `stash column drop OldField --yes`
+        then:
+          - Column is dropped without prompting
+          - Exit code is 0
+
+    in_scope:
+      - Removing from config.json
+      - Removing from SQLite
+      - Confirmation prompt
+
+    out_of_scope:
+      - Purging historical data
+
+    must_not:
+      - Delete JSONL history
+      - Drop without confirmation (unless --yes)

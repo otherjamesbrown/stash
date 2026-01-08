@@ -1,0 +1,277 @@
+feature: Querying
+description: |
+  Operations for listing, filtering, and querying records.
+
+dependencies:
+  - usecases/records.yaml
+
+usecases:
+  - id: UC-QRY-001
+    title: List Records
+    interface: cli
+    status: active
+
+    description: |
+      User wants to list records with optional filtering and output formats.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: List all active records
+        given: Stash has 100 records (5 deleted)
+        when: User runs `stash list`
+        then:
+          - 95 active records are shown
+          - Deleted records are excluded
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Filter with WHERE clause
+        given: Stash has records with various Categories
+        when: User runs `stash list --where "Category = 'electronics'"`
+        then:
+          - Only matching records are shown
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Show as tree
+        given: Stash has hierarchical records
+        when: User runs `stash list --tree`
+        then:
+          - Records are shown in tree format
+          - Children indented under parents
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: JSON output
+        given: Stash has records
+        when: User runs `stash list --json`
+        then:
+          - Output is valid JSON array
+          - Each record includes _id, _hash, and user fields
+
+      - id: AC-05
+        criterion: Show deleted records
+        given: Stash has 5 deleted records
+        when: User runs `stash list --deleted`
+        then:
+          - Only deleted records are shown
+          - Exit code is 0
+
+      - id: AC-06
+        criterion: Show both active and deleted
+        given: Stash has active and deleted records
+        when: User runs `stash list --deleted --all`
+        then:
+          - Both active and deleted records are shown
+          - Exit code is 0
+
+      - id: AC-07
+        criterion: Select specific columns
+        given: Stash has columns Name, Price, Category
+        when: User runs `stash list --columns "id,Name,Price"`
+        then:
+          - Output shows only specified columns
+          - Exit code is 0
+
+    in_scope:
+      - Listing active records
+      - Filtering with WHERE clause
+      - Tree view for hierarchy
+      - JSON output format
+      - Showing deleted records
+      - Selecting columns
+
+    out_of_scope:
+      - Complex SQL queries (see UC-QRY-003)
+      - Pagination (future)
+
+    must_not:
+      - Show deleted records by default
+      - Include system columns unless requested
+
+  - id: UC-QRY-002
+    title: List Children
+    interface: cli
+    status: active
+
+    description: |
+      User wants to list direct children of a record.
+
+    actor: User
+
+    preconditions:
+      - Parent record exists
+
+    depends_on:
+      - UC-REC-001
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: List direct children
+        given: Record inv-a1b2 has children inv-a1b2.1 and inv-a1b2.2
+        when: User runs `stash children inv-a1b2`
+        then:
+          - Both children are listed
+          - Grandchildren are NOT listed (direct children only)
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: JSON output
+        given: Record inv-a1b2 has children
+        when: User runs `stash children inv-a1b2 --json`
+        then:
+          - Output is valid JSON array
+          - Each child includes _id and user fields
+
+      - id: AC-03
+        criterion: Empty result for no children
+        given: Record inv-ex4j has no children
+        when: User runs `stash children inv-ex4j`
+        then:
+          - Empty result shown
+          - Exit code is 0
+
+    in_scope:
+      - Listing direct children only
+      - JSON output format
+
+    out_of_scope:
+      - Recursive listing (use --tree on list)
+
+    must_not:
+      - Include grandchildren
+
+  - id: UC-QRY-003
+    title: Raw SQL Query
+    interface: cli
+    status: active
+
+    description: |
+      User wants to run arbitrary SQL against the SQLite cache.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with data in SQLite cache
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Execute SELECT query
+        given: Stash "inventory" has records
+        when: User runs `stash query "SELECT Name, Price FROM inventory WHERE Price > 100"`
+        then:
+          - Query results are displayed
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Reject non-SELECT queries
+        given: Stash exists
+        when: User runs `stash query "DELETE FROM inventory"`
+        then:
+          - Command fails with appropriate error
+          - No data is modified
+
+      - id: AC-03
+        criterion: JSON output
+        given: Stash has records
+        when: User runs `stash query "SELECT * FROM inventory" --json`
+        then:
+          - Output is valid JSON array
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Aggregation queries
+        given: Stash has records
+        when: User runs `stash query "SELECT Category, COUNT(*) FROM inventory GROUP BY Category"`
+        then:
+          - Aggregation results are displayed
+          - Exit code is 0
+
+    in_scope:
+      - SELECT queries
+      - JSON output format
+      - Aggregations, joins, subqueries
+
+    out_of_scope:
+      - INSERT/UPDATE/DELETE (use stash commands)
+
+    must_not:
+      - Allow data modification via SQL
+      - Execute queries against JSONL (cache only)
+
+  - id: UC-QRY-004
+    title: View Change History
+    interface: cli
+    status: active
+
+    description: |
+      User wants to see the change history for a stash or specific record.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with records
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Show all recent changes
+        given: Stash has records with multiple changes
+        when: User runs `stash history`
+        then:
+          - Recent operations are listed
+          - Shows timestamp, operation, ID, actor, branch
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Show history for specific record
+        given: Record inv-ex4j has been updated multiple times
+        when: User runs `stash history inv-ex4j`
+        then:
+          - Only changes to that record are shown
+          - Includes all operations (create, updates)
+
+      - id: AC-03
+        criterion: Filter by actor
+        given: Changes by multiple actors exist
+        when: User runs `stash history --by alice`
+        then:
+          - Only changes by alice are shown
+
+      - id: AC-04
+        criterion: Filter by time
+        given: Changes over past week exist
+        when: User runs `stash history --since 24h`
+        then:
+          - Only changes in last 24 hours shown
+
+      - id: AC-05
+        criterion: Limit results
+        given: Many changes exist
+        when: User runs `stash history --limit 50`
+        then:
+          - Only 50 most recent changes shown
+
+      - id: AC-06
+        criterion: JSON output
+        given: Changes exist
+        when: User runs `stash history --json`
+        then:
+          - Output is valid JSON array
+          - Exit code is 0
+
+    in_scope:
+      - Listing change history
+      - Filtering by record, actor, time
+      - JSON output format
+
+    out_of_scope:
+      - Reverting changes (future)
+      - Diff view (future)
+
+    must_not:
+      - Show purged record history (it's gone)

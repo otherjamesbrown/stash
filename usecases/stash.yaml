@@ -1,0 +1,266 @@
+feature: Stash Management
+description: |
+  Core stash lifecycle operations: creating, removing, and inspecting stashes.
+  A stash is a named collection of records with a unique ID prefix.
+
+usecases:
+  - id: UC-ST-001
+    title: Initialize Stash
+    interface: cli
+    status: active
+
+    description: |
+      User wants to create a new stash to store structured data.
+      The stash is initialized with a name, prefix, and empty schema.
+
+    actor: User
+
+    preconditions:
+      - .stash directory may or may not exist
+      - No stash with same name exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Create stash with required fields
+        given: No stash named "inventory" exists
+        when: User runs `stash init inventory --prefix inv-`
+        then:
+          - Directory .stash/inventory/ is created
+          - config.json contains name, prefix, created_at, created_by
+          - Empty records.jsonl is created
+          - files/ subdirectory is created
+          - Daemon is started (unless --no-daemon)
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Reject duplicate stash name
+        given: Stash "inventory" already exists
+        when: User runs `stash init inventory --prefix inv-`
+        then:
+          - Command fails with exit code 1
+          - Error message indicates stash exists
+          - No files are modified
+
+      - id: AC-03
+        criterion: Reject invalid prefix
+        given: No stash named "test" exists
+        when: User runs `stash init test --prefix x` (too short)
+        then:
+          - Command fails with exit code 2
+          - Error message explains prefix requirements (3-5 chars: 2-4 letters + dash)
+          - No files are created
+
+      - id: AC-04
+        criterion: Skip daemon with flag
+        given: No stash named "test" exists
+        when: User runs `stash init test --prefix ts- --no-daemon`
+        then:
+          - Stash is created successfully
+          - Daemon is NOT started
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Capture actor and branch
+        given: User is "alice" on branch "main"
+        when: User runs `stash init inventory --prefix inv-`
+        then:
+          - config.json created_by is "alice"
+          - First operation records _branch as "main"
+
+    in_scope:
+      - Creating .stash directory structure
+      - Creating config.json with metadata
+      - Creating empty records.jsonl
+      - Starting daemon (default behavior)
+      - Capturing actor and branch context
+
+    out_of_scope:
+      - Adding columns (see UC-COL-001)
+      - Adding records (see UC-REC-001)
+      - Modifying existing stashes
+
+    must_not:
+      - Overwrite existing stash
+      - Start daemon if --no-daemon specified
+      - Create stash with invalid prefix
+
+  - id: UC-ST-002
+    title: Drop Stash
+    interface: cli
+    status: active
+
+    description: |
+      User wants to permanently delete a stash and all its data.
+      This is destructive and cannot be undone.
+
+    actor: User
+
+    preconditions:
+      - Stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Drop stash with confirmation
+        given: Stash "inventory" exists with records
+        when: User runs `stash drop inventory` and confirms
+        then:
+          - Directory .stash/inventory/ is deleted
+          - SQLite table is dropped from cache.db
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Skip confirmation with --yes
+        given: Stash "inventory" exists
+        when: User runs `stash drop inventory --yes`
+        then:
+          - Stash is deleted without prompting
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Reject non-existent stash
+        given: No stash named "fake" exists
+        when: User runs `stash drop fake --yes`
+        then:
+          - Command fails with exit code 3
+          - Error message indicates stash not found
+
+    in_scope:
+      - Deleting stash directory
+      - Removing from SQLite cache
+      - Confirmation prompt
+
+    out_of_scope:
+      - Soft-delete (stashes are always hard-deleted)
+      - Backup before delete
+
+    must_not:
+      - Delete without confirmation (unless --yes)
+      - Leave orphaned SQLite tables
+
+  - id: UC-ST-003
+    title: Show Stash Info
+    interface: cli
+    status: active
+
+    description: |
+      User wants to see status of all stashes including record counts,
+      daemon status, and current context (actor, branch).
+
+    actor: User
+
+    preconditions:
+      - At least one stash exists (or shows empty message)
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Show all stashes with stats
+        given: Stashes "inventory" (50 records) and "contacts" (25 records) exist
+        when: User runs `stash info`
+        then:
+          - Output lists both stashes with prefixes
+          - Record counts are shown
+          - Deleted record counts are shown
+          - File counts are shown
+          - Daemon status is shown
+          - Current actor and branch are shown
+
+      - id: AC-02
+        criterion: JSON output format
+        given: Stash "inventory" exists
+        when: User runs `stash info --json`
+        then:
+          - Output is valid JSON
+          - Contains stashes array with stats
+          - Contains daemon status object
+          - Contains context (actor, branch)
+
+    in_scope:
+      - Listing all stashes
+      - Record and file counts
+      - Daemon status
+      - Actor and branch context
+
+    out_of_scope:
+      - Detailed record listing (see UC-QRY-001)
+      - Column information (see UC-COL-002)
+
+    must_not:
+      - Show deleted records in main count (show separately)
+
+  - id: UC-ST-004
+    title: Generate Onboarding Snippet
+    interface: cli
+    status: active
+
+    description: |
+      User wants to get a CLAUDE.md snippet for agent integration.
+
+    actor: User
+
+    preconditions:
+      - At least one stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Output markdown snippet
+        given: Stash "inventory" exists
+        when: User runs `stash onboard`
+        then:
+          - Output is valid markdown
+          - Contains quick reference commands
+          - Contains stash info command reference
+          - Exit code is 0
+
+    in_scope:
+      - Generating markdown snippet
+      - Including common commands
+
+    out_of_scope:
+      - Automatically modifying CLAUDE.md
+
+    must_not:
+      - Modify any files
+
+  - id: UC-ST-005
+    title: Generate Context for Agent
+    interface: cli
+    status: active
+
+    description: |
+      User wants to output current stash context for agent injection.
+
+    actor: User
+
+    preconditions:
+      - At least one stash exists
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Output full context
+        given: Stash "inventory" exists with columns and records
+        when: User runs `stash prime`
+        then:
+          - Output includes actor and branch
+          - Output includes column list with descriptions
+          - Output includes record counts and statistics
+          - Output includes recent changes summary
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Filter to specific stash
+        given: Multiple stashes exist
+        when: User runs `stash prime --stash inventory`
+        then:
+          - Output only includes inventory stash context
+          - Exit code is 0
+
+    in_scope:
+      - Generating context markdown
+      - Column and record statistics
+      - Recent activity summary
+
+    out_of_scope:
+      - Listing all records (see UC-QRY-001)
+
+    must_not:
+      - Modify any files
