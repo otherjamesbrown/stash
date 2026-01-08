@@ -12,6 +12,8 @@
 
 Stash is a lightweight, single-binary tool that provides AI agents with a structured way to collect, organize, and query any kind of data. Unlike scattered markdown files or unwieldy CSVs, Stash offers:
 
+> **Heavily influenced by [Beads](https://github.com/steveyegge/beads)** - a distributed, git-backed issue tracker for AI agents. If you're working with AI agents, you need Beads for task tracking. Stash complements Beads by providing the same robust patterns (JSONL + SQLite + daemon) for research data and structured content.
+
 - **Fluid schema**: Add columns anytime without migrations
 - **Hierarchical records**: Parent-child relationships with dot notation IDs
 - **Dual storage**: JSONL source of truth + SQLite cache for queries
