@@ -1,80 +1,98 @@
-# stash - Claude Configuration
+# stash
 
-This document provides Claude-specific configuration for the stash repository.
+A record-centric structured data store for AI agents. Fluid schema, hierarchical records, dual storage (JSONL + SQLite).
 
-## Issue Tracking with Beads
+## Key Documents
 
-**IMPORTANT**: We use beads for issue tracking. All tasks, bugs, and features are tracked as beads issues.
+| Document | Purpose |
+|----------|---------|
+| **[ARCHITECTURE.md](./ARCHITECTURE.md)** | System design, components, principles, docs map |
+| **[context/agents.md](./context/agents.md)** | Core agent rules (NEVER/ALWAYS, domains, handoffs) |
+| **[context/beads.md](./context/beads.md)** | Beads workflow, commands, templates |
 
-**Common beads commands:**
-```bash
-bd list --status open              # List open issues
-bd list --priority 1               # List high priority issues
-bd show <issue-id>                 # Show issue details
-bd create "Title" --type feature   # Create new issue
-bd update <issue-id> --status in_progress  # Update status
-bd close <issue-id>                # Close an issue
-bd ready                           # Find tasks with no blockers
-```
+> **Navigation**: CLAUDE.md is the entry point. For system architecture, see ARCHITECTURE.md. For agent rules, see context/agents.md.
 
-**Bead ID shorthand:**
-- Prefix `st-` can be omitted when referencing beads
-- Example: "abc123" → st-abc123
+## AI-Coding First Principles
 
-**Session management:**
-- Use `/handoff` before ending a session to preserve context
-- Use `/pickup` to resume from a previous handoff
-- Use `bd sync --from-main` before committing (on ephemeral branches)
+| Principle | Why |
+|-----------|-----|
+| **Use-case driven** | Specs drift from implementation. Tests anchored to use-cases catch this. |
+| **High test coverage** | AI generates code fast; tests are our safety net. |
+| **Defined agents** | Consistent agent patterns prevent context bloat and ensure reproducibility. |
+| **Debugger agent** | Systematic debugging, not random edits. Always understand root cause first. |
+| **Context hygiene** | Watch for bloat. Summarize, close beads, use /handoff. |
 
-## Workspace System
+## Beads Issue Tracking
 
-This project uses git worktrees for parallel development:
+**Prefix**: `st-`
 
 ```bash
-workspace                    # List all workspaces
-workspace <name>             # Enter workspace by name or number
-workspace new <name> [base]  # Create new workspace
-workspace remove <name>      # Remove workspace
+bd ready                    # Find unblocked tasks
+bd list --status open       # All open issues
+bd update <id> --status in_progress
+bd close <id> --reason "commit abc123: summary"
 ```
 
-**Key paths:**
-- Main repository: `~/stash`
-- Worktrees: `~/worktrees/<name>`
-- Beads database: Shared via BEADS_DIR environment variable
+See **[context/beads.md](./context/beads.md)** for full workflow.
 
-## Git-Crypt
+## Quick Commands
 
-Sensitive files are encrypted with git-crypt.
+```bash
+# Build
+go build ./...
 
-- **Key location**: `~/.config/git-crypt/stash-key`
-- The workspace function auto-unlocks when creating new worktrees
-- Manual unlock: `git-crypt unlock ~/.config/git-crypt/stash-key`
+# Test
+go test ./...
+```
+
+## Session Workflows
+
+```bash
+# Start
+bd ready                     # Find unblocked work
+workspace                    # List workspaces
+
+# End - MANDATORY (work not done until pushed)
+git status                   # Check what changed
+git add <files>              # Stage changes
+bd sync                      # Commit beads
+git commit -m "..."          # Commit code
+git push                     # PUSH TO REMOTE - required!
+git status                   # Must show "up to date"
+```
+
+**CRITICAL**: Never stop before pushing. Never say "ready to push when you are" - YOU must push.
 
 ## Branch Strategy
 
 All development happens on feature branches merged directly to `main`.
 
-## Session Workflows
+## Workspace
 
-### Starting a Session
 ```bash
-bd ready                     # Find unblocked work
-bd list --status=in_progress # Check ongoing work
-workspaces                   # See active worktrees
+workspace                    # List workspaces
+workspace <name>             # Enter workspace
+workspace new <name> [base]  # Create new workspace
+workspace remove <name>      # Remove workspace
 ```
 
-### Creating a Feature Branch
-```bash
-workspace new feature-xyz main  # Create worktree from main
-```
+- Main repo: `~/stash`
+- Worktrees: `~/worktrees/<name>`
 
-### Ending a Session
-```bash
-/handoff                     # Create handoff bead
-bd sync --from-main          # Pull beads updates (ephemeral branches)
-git add . && git commit      # Commit changes
-```
+## Development Discipline (UCDD)
 
-## Project-Specific Notes
+This project uses **Use Case Driven Development**. All features are specified in `usecases/*.yaml` before implementation.
 
-<!-- Add project-specific rules and patterns here -->
+1. **Read the use case file** before implementing
+2. **Write failing tests first** (one subtest per AC)
+3. **Implement until tests pass**
+4. **STOP** - Do not add anything not in acceptance criteria
+
+| File | Prefix | Feature Area |
+|------|--------|--------------|
+| `usecases/stash.yaml` | UC-ST- | Stash management |
+| `usecases/columns.yaml` | UC-COL- | Column management |
+| `usecases/records.yaml` | UC-REC- | Record operations |
+| `usecases/query.yaml` | UC-QRY- | Querying |
+| `usecases/import.yaml` | UC-IMP- | Import/export |
+| `usecases/sync.yaml` | UC-SYN-, UC-DMN- | Sync, daemon |

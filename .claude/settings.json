@@ -1,11 +1,11 @@
 {
   "allowedBashCommands": [
+    "bd:*",
     "gh:*",
     "git:*",
-    "npm:*",
-    "pnpm:*",
+    "go:*",
+    "golangci-lint:*",
     "make:*",
-    "docker:*",
-    "kubectl:*"
+    "docker:*"
   ]
 }
