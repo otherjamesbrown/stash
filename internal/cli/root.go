@@ -25,6 +25,11 @@ var rootCmd = &cobra.Command{
 	Long: `Stash is a lightweight, single-binary tool that provides AI agents
 with a structured way to collect, organize, and query any kind of data.
 
+Getting Started:
+  1. stash init <name>           # Create a new stash
+  2. stash column add <columns>  # Define columns (required before adding records)
+  3. stash add <value>           # Add records
+
 Features:
   - Fluid schema: Add columns anytime without migrations
   - Hierarchical records: Parent-child relationships with dot notation IDs

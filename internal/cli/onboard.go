@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/user/stash/internal/context"
 )
 
 var onboardCmd = &cobra.Command{
@@ -26,61 +25,31 @@ func init() {
 }
 
 func runOnboard(cmd *cobra.Command, args []string) error {
-	// Resolve context
-	ctx, _ := context.Resolve(GetActorName(), "")
-
 	snippet := `## Stash - Structured Data Store
 
-Stash is a structured data store for collecting and querying data.
+Stash is a structured data store for AI agents.
+Run ` + "`stash prime`" + ` for workflow context.
 
 ### Quick Reference
 
 ` + "```" + `bash
-# View all stashes and status
-stash info
-
-# Add a record (primary value goes to first column)
+# Setup (column-first workflow)
+stash init <name> --prefix <pfx>-
+stash column add <col1> <col2> ...   # Required before adding records
 stash add "value" --set field=value
 
-# List records
-stash list
-stash list --json
+# Working with records
+stash list                           # List all
+stash show <id>                      # Show details
+stash set <id> field=value           # Update
+stash rm <id>                        # Delete
 
-# Get a specific record
-stash get <id>
-
-# Update a record
-stash set <id> field=value
-
-# Delete a record (soft-delete)
-stash rm <id>
-
-# Query records
-stash query "field = 'value'"
+# Query and export
+stash list --where "field=value"
+stash export records.jsonl
 ` + "```" + `
 
-### Current Context
-- Actor: ` + ctx.Actor + `
-- Branch: ` + ctx.Branch + `
-
-### Column Operations
-
-` + "```" + `bash
-# Add a new column
-stash col add <name> --desc "Description"
-
-# List columns
-stash col list
-` + "```" + `
-
-### JSON Output
-
-All commands support ` + "`--json`" + ` for structured output:
-
-` + "```" + `bash
-stash list --json | jq '.records[].id'
-stash info --json
-` + "```" + `
+For full workflow details: ` + "`stash prime`" + `
 `
 
 	fmt.Print(snippet)

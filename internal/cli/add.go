@@ -25,8 +25,11 @@ var addCmd = &cobra.Command{
 	Short: "Add a new record",
 	Long: `Add a new record to the current stash.
 
+Requires at least one column to be defined first:
+  stash column add Name Price Category
+
 The value is assigned to the first (primary) column. Additional fields
-can be set using --set flags.
+can be set using --set flags. Column names use underscores, not hyphens.
 
 Records get a unique ID based on the stash prefix (e.g., inv-ex4j).
 Child records can be created with --parent, getting IDs like inv-ex4j.1.

@@ -63,12 +63,13 @@ func TestUC_ST_004_GenerateOnboarding(t *testing.T) {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		// Then: Contains quick reference commands
+		// Then: Contains essential quick reference commands
 		expectedCommands := []string{
-			"stash info",
+			"stash init",
+			"stash column add",
 			"stash add",
 			"stash list",
-			"stash get",
+			"stash show",
 			"stash set",
 			"stash rm",
 		}
@@ -79,9 +80,9 @@ func TestUC_ST_004_GenerateOnboarding(t *testing.T) {
 			}
 		}
 
-		// Then: Contains stash info command reference
-		if !strings.Contains(output, "stash info") {
-			t.Error("expected output to contain 'stash info' command reference")
+		// Then: Points to stash prime for full workflow
+		if !strings.Contains(output, "stash prime") {
+			t.Error("expected output to reference 'stash prime' for full workflow details")
 		}
 
 		// Then: Contains markdown formatting

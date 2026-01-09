@@ -38,9 +38,12 @@ func runPrime(cmd *cobra.Command, args []string) error {
 	// Resolve context
 	ctx, _ := context.Resolve(GetActorName(), GetStashName())
 
+	// Always output workflow rules first
+	printWorkflowRules()
+
 	// Check if stash directory exists
 	if ctx.StashDir == "" {
-		fmt.Println("# Stash Context")
+		fmt.Println("# Current Context")
 		fmt.Println()
 		fmt.Println("No stashes found in current directory tree.")
 		fmt.Println()
@@ -89,7 +92,7 @@ func runPrime(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output header
-	fmt.Println("# Stash Context")
+	fmt.Println("# Current Context")
 	fmt.Println()
 	fmt.Printf("**Actor**: %s\n", ctx.Actor)
 	fmt.Printf("**Branch**: %s\n", ctx.Branch)
@@ -202,4 +205,59 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// printWorkflowRules outputs the workflow rules section for AI agents
+func printWorkflowRules() {
+	fmt.Print(`# Stash Workflow
+
+## Setup (Column-First)
+
+Stash requires columns before records:
+
+` + "```" + `bash
+stash init <name> --prefix <pfx>-   # Create stash
+stash column add <col1> <col2> ...  # Define columns FIRST
+stash add <value> --set key=value   # Then add records
+` + "```" + `
+
+## Column Naming
+
+- Use underscores, not hyphens: ` + "`company_name`" + ` not ` + "`company-name`" + `
+- Start with letter, alphanumeric + underscore only
+- First column is "primary" - receives the value in ` + "`stash add <value>`" + `
+
+## Essential Commands
+
+| Action | Command |
+|--------|---------|
+| Add record | ` + "`stash add \"value\" --set field=value`" + ` |
+| List records | ` + "`stash list`" + ` or ` + "`stash list --where \"field=value\"`" + ` |
+| Show record | ` + "`stash show <id>`" + ` |
+| Update field | ` + "`stash set <id> field=value`" + ` |
+| Delete record | ` + "`stash rm <id>`" + ` |
+| Add column | ` + "`stash column add <name>`" + ` |
+| Export data | ` + "`stash export <file.jsonl>`" + ` |
+
+## Common Patterns
+
+**Batch column setup:**
+` + "```" + `bash
+stash column add name status priority notes created_at
+` + "```" + `
+
+**Add with multiple fields:**
+` + "```" + `bash
+stash add "Task title" --set status=pending --set priority=high
+` + "```" + `
+
+**Filter and query:**
+` + "```" + `bash
+stash list --where "status=pending"
+stash query "SELECT * FROM records WHERE priority='high'"
+` + "```" + `
+
+---
+
+`)
 }
