@@ -441,6 +441,14 @@ func (c *SQLiteCache) ListRecords(stashName string, columns []string, opts ListO
 		case "LIKE":
 			conditions = append(conditions, fmt.Sprintf(`"%s" LIKE ?`, fieldName))
 			args = append(args, w.Value)
+		case "IS NULL":
+			conditions = append(conditions, fmt.Sprintf(`"%s" IS NULL`, fieldName))
+		case "IS NOT NULL":
+			conditions = append(conditions, fmt.Sprintf(`"%s" IS NOT NULL`, fieldName))
+		case "IS EMPTY":
+			conditions = append(conditions, fmt.Sprintf(`("%s" IS NULL OR "%s" = '')`, fieldName, fieldName))
+		case "IS NOT EMPTY":
+			conditions = append(conditions, fmt.Sprintf(`("%s" IS NOT NULL AND "%s" != '')`, fieldName, fieldName))
 		}
 	}
 

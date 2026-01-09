@@ -1,3 +1,4 @@
+<!-- dev-setup-template: claude/CLAUDE.md.template | version: 1.0.0 -->
 # stash
 
 A record-centric structured data store for AI agents. Fluid schema, hierarchical records, dual storage (JSONL + SQLite).
@@ -25,6 +26,8 @@ A record-centric structured data store for AI agents. Fluid schema, hierarchical
 ## Beads Issue Tracking
 
 **Prefix**: `st-`
+
+> When user refers to `st-xxx`, it's a bead ID - use `bd show st-xxx` to view it.
 
 ```bash
 bd ready                    # Find unblocked tasks

@@ -254,6 +254,9 @@ stash add "Task title" --set status=pending --set priority=high
 **Filter and query:**
 ` + "```" + `bash
 stash list --where "status=pending"
+stash list --where "notes IS NULL"       # Find records with unset field
+stash list --where "notes IS EMPTY"      # Find records with NULL or empty string
+stash list --where "notes IS NOT EMPTY"  # Find records with values
 stash query "SELECT * FROM records WHERE priority='high'"
 ` + "```" + `
 

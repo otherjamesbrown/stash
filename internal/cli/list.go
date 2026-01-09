@@ -54,6 +54,10 @@ WHERE clause format:
   field>=value       Greater than or equal
   field<=value       Less than or equal
   field LIKE pattern Pattern match (use % for wildcard)
+  field IS NULL      Field is null/unset
+  field IS NOT NULL  Field has a value
+  field IS EMPTY     Field is null or empty string
+  field IS NOT EMPTY Field has a non-empty value
 
 Examples:
   stash list
@@ -90,8 +94,26 @@ func init() {
 //   - field!=value
 //   - field>value, field<value, field>=value, field<=value
 //   - field LIKE pattern
+//   - field IS NULL, field IS NOT NULL
+//   - field IS EMPTY, field IS NOT EMPTY
 func parseWhereClause(clause string) (storage.WhereCondition, error) {
 	clause = strings.TrimSpace(clause)
+
+	// Check for IS NULL / IS NOT NULL / IS EMPTY / IS NOT EMPTY (case-insensitive)
+	isNullRegex := regexp.MustCompile(`(?i)^(\S+)\s+IS\s+(NOT\s+)?(NULL|EMPTY)$`)
+	if matches := isNullRegex.FindStringSubmatch(clause); len(matches) == 4 {
+		operator := strings.ToUpper(matches[3]) // NULL or EMPTY
+		if matches[2] != "" {
+			operator = "IS NOT " + operator
+		} else {
+			operator = "IS " + operator
+		}
+		return storage.WhereCondition{
+			Field:    matches[1],
+			Operator: operator,
+			Value:    "",
+		}, nil
+	}
 
 	// Check for LIKE operator (case-insensitive)
 	likeRegex := regexp.MustCompile(`(?i)^(\S+)\s+LIKE\s+(.+)$`)
@@ -117,7 +139,7 @@ func parseWhereClause(clause string) (storage.WhereCondition, error) {
 		}
 	}
 
-	return storage.WhereCondition{}, fmt.Errorf("invalid WHERE clause: %s (expected format: field=value, field>value, or field LIKE pattern)", clause)
+	return storage.WhereCondition{}, fmt.Errorf("invalid WHERE clause: %s (expected format: field=value, field>value, field LIKE pattern, or field IS NULL/EMPTY)", clause)
 }
 
 // stripQuotes removes surrounding quotes from a string.

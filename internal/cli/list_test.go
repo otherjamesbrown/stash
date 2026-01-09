@@ -960,6 +960,270 @@ func TestUC_QRY_001_FilterRecords(t *testing.T) {
 			t.Errorf("expected Laptop to be shown (case-insensitive match), output: %s", output)
 		}
 	})
+
+	t.Run("AC-02: filter with WHERE clause IS NULL", func(t *testing.T) {
+		// Given: Stash has records where some have NULL values
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Notes"})
+		defer cleanup()
+
+		// Create record with Notes set
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Notes=Has charger"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record without Notes (NULL)
+		rootCmd.SetArgs([]string{"add", "Mouse"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash list --where "Notes IS NULL"`
+		rootCmd.SetArgs([]string{"list", "--where", "Notes IS NULL"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Only records with NULL Notes are shown
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+		if !strings.Contains(output, "Mouse") {
+			t.Errorf("expected Mouse (NULL Notes) to be shown, output: %s", output)
+		}
+		if strings.Contains(output, "Laptop") {
+			t.Error("expected Laptop (has Notes) to NOT be shown")
+		}
+	})
+
+	t.Run("AC-02: filter with WHERE clause IS NOT NULL", func(t *testing.T) {
+		// Given: Stash has records where some have NULL values
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Notes"})
+		defer cleanup()
+
+		// Create record with Notes set
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Notes=Has charger"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record without Notes (NULL)
+		rootCmd.SetArgs([]string{"add", "Mouse"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash list --where "Notes IS NOT NULL"`
+		rootCmd.SetArgs([]string{"list", "--where", "Notes IS NOT NULL"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Only records with non-NULL Notes are shown
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if !strings.Contains(output, "Laptop") {
+			t.Error("expected Laptop (has Notes) to be shown")
+		}
+		if strings.Contains(output, "Mouse") {
+			t.Error("expected Mouse (NULL Notes) to NOT be shown")
+		}
+	})
+
+	t.Run("AC-02: filter with WHERE clause IS EMPTY", func(t *testing.T) {
+		// Given: Stash has records with NULL, empty string, and populated values
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Notes"})
+		defer cleanup()
+
+		// Create record with Notes set
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Notes=Has charger"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record without Notes (NULL)
+		rootCmd.SetArgs([]string{"add", "Mouse"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record with empty Notes
+		rootCmd.SetArgs([]string{"add", "Keyboard", "--set", "Notes="})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash list --where "Notes IS EMPTY"`
+		rootCmd.SetArgs([]string{"list", "--where", "Notes IS EMPTY"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Records with NULL or empty Notes are shown
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if !strings.Contains(output, "Mouse") {
+			t.Error("expected Mouse (NULL Notes) to be shown")
+		}
+		if !strings.Contains(output, "Keyboard") {
+			t.Error("expected Keyboard (empty Notes) to be shown")
+		}
+		if strings.Contains(output, "Laptop") {
+			t.Error("expected Laptop (has Notes) to NOT be shown")
+		}
+	})
+
+	t.Run("AC-02: filter with WHERE clause IS NOT EMPTY", func(t *testing.T) {
+		// Given: Stash has records with NULL, empty string, and populated values
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Notes"})
+		defer cleanup()
+
+		// Create record with Notes set
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Notes=Has charger"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record without Notes (NULL)
+		rootCmd.SetArgs([]string{"add", "Mouse"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Create record with empty Notes
+		rootCmd.SetArgs([]string{"add", "Keyboard", "--set", "Notes="})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash list --where "Notes IS NOT EMPTY"`
+		rootCmd.SetArgs([]string{"list", "--where", "Notes IS NOT EMPTY"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Only records with non-empty Notes are shown
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if !strings.Contains(output, "Laptop") {
+			t.Error("expected Laptop (has Notes) to be shown")
+		}
+		if strings.Contains(output, "Mouse") {
+			t.Error("expected Mouse (NULL Notes) to NOT be shown")
+		}
+		if strings.Contains(output, "Keyboard") {
+			t.Error("expected Keyboard (empty Notes) to NOT be shown")
+		}
+	})
+}
+
+// TestParseWhereClause tests the WHERE clause parser
+func TestParseWhereClause(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected storage.WhereCondition
+		wantErr  bool
+	}{
+		// Existing operators
+		{"field=value", storage.WhereCondition{Field: "field", Operator: "=", Value: "value"}, false},
+		{"field!=value", storage.WhereCondition{Field: "field", Operator: "!=", Value: "value"}, false},
+		{"field>100", storage.WhereCondition{Field: "field", Operator: ">", Value: "100"}, false},
+		{"field<100", storage.WhereCondition{Field: "field", Operator: "<", Value: "100"}, false},
+		{"field>=100", storage.WhereCondition{Field: "field", Operator: ">=", Value: "100"}, false},
+		{"field<=100", storage.WhereCondition{Field: "field", Operator: "<=", Value: "100"}, false},
+		{"field LIKE %pattern%", storage.WhereCondition{Field: "field", Operator: "LIKE", Value: "%pattern%"}, false},
+
+		// IS NULL / IS NOT NULL
+		{"field IS NULL", storage.WhereCondition{Field: "field", Operator: "IS NULL", Value: ""}, false},
+		{"field IS NOT NULL", storage.WhereCondition{Field: "field", Operator: "IS NOT NULL", Value: ""}, false},
+
+		// IS EMPTY / IS NOT EMPTY
+		{"field IS EMPTY", storage.WhereCondition{Field: "field", Operator: "IS EMPTY", Value: ""}, false},
+		{"field IS NOT EMPTY", storage.WhereCondition{Field: "field", Operator: "IS NOT EMPTY", Value: ""}, false},
+
+		// Case insensitivity
+		{"field is null", storage.WhereCondition{Field: "field", Operator: "IS NULL", Value: ""}, false},
+		{"field is not null", storage.WhereCondition{Field: "field", Operator: "IS NOT NULL", Value: ""}, false},
+		{"field is empty", storage.WhereCondition{Field: "field", Operator: "IS EMPTY", Value: ""}, false},
+		{"field is not empty", storage.WhereCondition{Field: "field", Operator: "IS NOT EMPTY", Value: ""}, false},
+		{"Field Is Empty", storage.WhereCondition{Field: "Field", Operator: "IS EMPTY", Value: ""}, false},
+		{"Field IS Not NULL", storage.WhereCondition{Field: "Field", Operator: "IS NOT NULL", Value: ""}, false},
+
+		// Whitespace handling
+		{"  field IS NULL  ", storage.WhereCondition{Field: "field", Operator: "IS NULL", Value: ""}, false},
+		{"field   IS   NOT   NULL", storage.WhereCondition{Field: "field", Operator: "IS NOT NULL", Value: ""}, false},
+
+		// Invalid
+		{"invalid", storage.WhereCondition{}, true},
+		{"", storage.WhereCondition{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := parseWhereClause(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseWhereClause(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if got.Field != tt.expected.Field {
+					t.Errorf("parseWhereClause(%q) Field = %q, want %q", tt.input, got.Field, tt.expected.Field)
+				}
+				if got.Operator != tt.expected.Operator {
+					t.Errorf("parseWhereClause(%q) Operator = %q, want %q", tt.input, got.Operator, tt.expected.Operator)
+				}
+				if got.Value != tt.expected.Value {
+					t.Errorf("parseWhereClause(%q) Value = %q, want %q", tt.input, got.Value, tt.expected.Value)
+				}
+			}
+		})
+	}
 }
 
 // TestListRecordsStatus tests that status column shows correctly
