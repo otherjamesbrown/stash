@@ -53,6 +53,8 @@ func resetFlags() {
 	attachMove = false
 	// Reset move command flags
 	moveParentID = ""
+	// Reset init-claude command flags
+	forceInstall = false
 	// Reset global flags
 	jsonOutput = false
 	stashName = ""

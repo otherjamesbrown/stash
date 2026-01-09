@@ -264,3 +264,103 @@ usecases:
 
     must_not:
       - Modify any files
+
+  - id: UC-ST-006
+    title: Initialize Claude Integration
+    interface: cli
+    status: active
+
+    description: |
+      User wants to set up Claude Code integration for stash commands.
+      This installs slash commands, updates settings, and appends to CLAUDE.md.
+
+    actor: User
+
+    preconditions:
+      - Current directory is a project root
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Create slash command files
+        given: .claude/commands/stash/ does not exist
+        when: User runs `stash init-claude`
+        then:
+          - Directory .claude/commands/stash/ is created
+          - Slash command files are created (list.md, add.md, show.md, set.md, rm.md, query.md)
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Update settings.json
+        given: .claude/settings.json exists
+        when: User runs `stash init-claude`
+        then:
+          - stash:* is added to allowedBashCommands array
+          - Existing settings are preserved
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Create settings.json if missing
+        given: .claude/settings.json does not exist
+        when: User runs `stash init-claude`
+        then:
+          - .claude/settings.json is created
+          - Contains allowedBashCommands with stash:*
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: Append to CLAUDE.md
+        given: CLAUDE.md exists
+        when: User runs `stash init-claude`
+        then:
+          - Onboarding snippet is appended
+          - Existing content is preserved
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Create CLAUDE.md if missing
+        given: CLAUDE.md does not exist
+        when: User runs `stash init-claude`
+        then:
+          - CLAUDE.md is created with onboarding snippet
+          - Exit code is 0
+
+      - id: AC-06
+        criterion: Fail if already installed
+        given: Slash commands already exist
+        when: User runs `stash init-claude`
+        then:
+          - Command fails with message "already installed"
+          - Suggests --force to overwrite
+          - Exit code is 1
+
+      - id: AC-07
+        criterion: Overwrite with --force
+        given: Slash commands already exist
+        when: User runs `stash init-claude --force`
+        then:
+          - Files are overwritten
+          - Exit code is 0
+
+      - id: AC-08
+        criterion: JSON output format
+        given: Any state
+        when: User runs `stash init-claude --json`
+        then:
+          - Output is valid JSON
+          - Contains installed_files array
+          - Contains settings_updated boolean
+          - Contains claude_md_updated boolean
+
+    in_scope:
+      - Creating .claude/commands/stash/ directory
+      - Installing slash command templates
+      - Updating .claude/settings.json
+      - Appending to CLAUDE.md
+
+    out_of_scope:
+      - Modifying existing slash commands (use --force)
+      - Installing to non-current directory
+
+    must_not:
+      - Overwrite existing files without --force
+      - Modify settings unrelated to stash
