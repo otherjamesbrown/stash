@@ -34,6 +34,10 @@ func resetFlags() {
 	listWhere = nil
 	listSearch = ""
 	listColumns = ""
+	// Reset count command flags
+	countAll = false
+	countDeleted = false
+	countWhere = nil
 	// Reset rm command flags
 	rmCascade = false
 	rmYes = false
