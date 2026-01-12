@@ -99,3 +99,50 @@ This project uses **Use Case Driven Development**. All features are specified in
 | `usecases/query.yaml` | UC-QRY- | Querying |
 | `usecases/import.yaml` | UC-IMP- | Import/export |
 | `usecases/sync.yaml` | UC-SYN-, UC-DMN- | Sync, daemon |
+
+## Help Text Standards
+
+Stash is **agent-native** - help text must serve both humans AND AI agents. When adding/updating commands:
+
+### Required Help Elements
+
+1. **AI Agent Examples** - Every command needs automation-friendly examples:
+   ```
+   Examples:
+     stash add "Laptop" --set Price=999           # Human example
+
+   AI Agent Examples:
+     # Batch processing pattern
+     stash query "SELECT id FROM inventory WHERE status IS NULL" --json | \
+       jq -r '.[].id' | while read id; do stash set $id status="processing"; done
+   ```
+
+2. **JSON Output Documentation** - Show exact structure:
+   ```
+   JSON Output (--json):
+     {"_id": "inv-xxx", "_created_by": "agent", "Name": "Laptop", "Price": 999}
+   ```
+
+3. **Error Handling** - Document failure modes for automation:
+   ```
+   Exit Codes:
+     0 - Success
+     1 - Record/resource not found
+     2 - Validation error
+   ```
+
+### Help Text Checklist
+
+When implementing a new command, help text MUST include:
+
+- [ ] **Short description** - One line, starts with verb
+- [ ] **Long description** - When to use, what it does
+- [ ] **Human examples** - Basic usage patterns
+- [ ] **AI agent examples** - Batch/automation patterns with `--json`
+- [ ] **JSON output format** - Exact structure returned
+- [ ] **Exit codes** - What each code means
+- [ ] **Related commands** - What to use next
+
+### Reference
+
+See `feedback/help-text-feedback.md` for real user feedback on help effectiveness.
