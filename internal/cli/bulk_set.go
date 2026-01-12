@@ -51,7 +51,32 @@ Examples:
   stash bulk-set --where "Category=electronics" --set Priority=high
   stash bulk-set --where "Status=pending" --set Status=complete --set ReviewedBy=admin
   stash bulk-set --where "Priority IS NULL" --set Priority=normal
-  stash bulk-set --where "Category=electronics" --where "Price>100" --set Featured=yes`,
+  stash bulk-set --where "Category=electronics" --where "Price>100" --set Featured=yes
+
+AI Agent Examples:
+  # Claim batch of work for processing
+  stash bulk-set --where "status IS NULL" --where "assigned_to IS EMPTY" \
+      --set status="claimed" --set assigned_to="$AGENT_ID"
+
+  # Mark agent's completed work
+  stash bulk-set --where "assigned_to=$AGENT_ID" --where "processed=true" \
+      --set status="complete"
+
+  # Reset stale claims (cleanup)
+  stash bulk-set --where "status=claimed" --where "claimed_at<2026-01-01" \
+      --set status="" --set assigned_to=""
+
+  # Prioritize records matching criteria
+  stash bulk-set --where "confidence_level=High" --where "priority IS NULL" \
+      --set priority="urgent"
+
+  # Clear fields in bulk
+  stash bulk-set --where "status=archived" --set notes="" --set assigned_to=""
+
+Exit Codes:
+  0  Success (includes 0 records matched)
+  1  Stash or column not found
+  2  Validation error (missing flags, invalid format)`,
 	Args: cobra.NoArgs,
 	RunE: runBulkSet,
 }

@@ -266,7 +266,7 @@ func TestRecordUpdate(t *testing.T) {
 		tmpDir := testutil.SetupStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
 
 		result := testutil.MustFailInDir(t, tmpDir, "set", "inv-fake", "Price=100")
-		testutil.AssertExitCode(t, result, 4)
+		testutil.AssertExitCode(t, result, 1) // Exit code 1 = record not found
 	})
 
 	t.Run("reject update to deleted record", func(t *testing.T) {

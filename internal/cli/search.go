@@ -31,7 +31,33 @@ Examples:
   stash search "disney"                    # Search all columns
   stash search "disney" --in company_name  # Search only company_name column
   stash search "disney" --in Name --in Description  # Search multiple columns
-  stash search "disney" --json             # Output as JSON`,
+  stash search "disney" --json             # Output as JSON
+
+AI Agent Examples:
+  # Find records mentioning a keyword
+  MATCHES=$(stash search "$KEYWORD" --json)
+  echo "Found $(echo "$MATCHES" | jq 'length') matches"
+
+  # Search and process matching records
+  stash search "error" --in status --in notes --json | \
+      jq -r '.[]._id' | while read id; do
+          stash set "$id" needs_review="true"
+      done
+
+  # Search in specific field for categorization
+  if stash search "$COMPANY" --in company_name --json | jq -e 'length > 0' >/dev/null; then
+      echo "Company already exists"
+  else
+      stash add "$COMPANY"
+  fi
+
+  # Quick existence check
+  EXISTS=$(stash search "$TERM" --json | jq 'length')
+  [ "$EXISTS" -gt 0 ] && echo "Found $EXISTS matches"
+
+Exit Codes:
+  0  Success (includes 0 matches)
+  1  Stash not found`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSearch,
 }

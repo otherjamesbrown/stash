@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -38,7 +37,33 @@ Examples:
   stash set inv-ex4j Price=1299
   stash set inv-ex4j --col Price 1299 --col Stock 50
   stash set inv-ex4j Notes=""  # Clear a field
-  stash set inv-ex4j Category=Electronics --auto-create  # Create column if needed`,
+  stash set inv-ex4j Category=Electronics --auto-create  # Create column if needed
+
+AI Agent Examples:
+  # Update with processing results
+  stash set "$RECORD_ID" status="complete" result="$AI_OUTPUT"
+
+  # Timestamp updates
+  stash set "$RECORD_ID" processed_at="$(date -Iseconds)"
+
+  # Queue processing pattern
+  stash query "SELECT id FROM tasks WHERE status='pending'" --json | \
+      jq -r '.[].id' | while read id; do
+          stash set "$id" status="processing"
+          # ... do work ...
+          stash set "$id" status="complete"
+      done
+
+  # Error handling with status tracking
+  if ! process_record "$id"; then
+      stash set "$id" status="error" error_msg="Processing failed"
+  fi
+
+Exit Codes:
+  0  Success - record updated
+  1  Record or column not found
+  2  Validation error (invalid format, reserved column name)
+  3  Record is deleted (use 'stash restore' first)`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runSet,
 }
@@ -61,8 +86,8 @@ func runSet(cmd *cobra.Command, args []string) error {
 		for i := 1; i < len(args); i++ {
 			parts := strings.SplitN(args[i], "=", 2)
 			if len(parts) != 2 {
-				fmt.Fprintf(os.Stderr, "Error: invalid format: %s (expected Field=Value)\n", args[i])
-				Exit(2)
+				ExitValidationError(fmt.Sprintf("invalid format: %s (expected Field=Value)", args[i]),
+					map[string]interface{}{"input": args[i]})
 				return nil
 			}
 			fieldName := strings.TrimSpace(parts[0])
@@ -87,8 +112,8 @@ func runSet(cmd *cobra.Command, args []string) error {
 			// Try space-separated format: "Field Value"
 			parts = strings.SplitN(colFlag, " ", 2)
 			if len(parts) != 2 {
-				fmt.Fprintf(os.Stderr, "Error: invalid --col format: %s (expected Field=Value or 'Field Value')\n", colFlag)
-				Exit(2)
+				ExitValidationError(fmt.Sprintf("invalid --col format: %s (expected Field=Value or 'Field Value')", colFlag),
+					map[string]interface{}{"input": colFlag})
 				return nil
 			}
 		}
@@ -98,8 +123,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(updates) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: no field updates specified")
-		Exit(2)
+		ExitValidationError("no field updates specified", nil)
 		return nil
 	}
 
@@ -107,13 +131,11 @@ func runSet(cmd *cobra.Command, args []string) error {
 	ctx, err := context.ResolveRequired(GetActorName(), GetStashName())
 	if err != nil {
 		if errors.Is(err, context.ErrNoStashDir) {
-			fmt.Fprintln(os.Stderr, "Error: no .stash directory found")
-			Exit(1)
+			ExitNoStashDir()
 			return nil
 		}
 		if errors.Is(err, context.ErrNoStash) {
-			fmt.Fprintln(os.Stderr, "Error: no stash specified and multiple stashes exist (use --stash)")
-			Exit(1)
+			ExitValidationError("no stash specified and multiple stashes exist (use --stash)", nil)
 			return nil
 		}
 		return fmt.Errorf("failed to resolve context: %w", err)
@@ -130,8 +152,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	stash, err := store.GetStash(ctx.Stash)
 	if err != nil {
 		if errors.Is(err, model.ErrStashNotFound) {
-			fmt.Fprintf(os.Stderr, "Error: stash '%s' not found\n", ctx.Stash)
-			Exit(1)
+			ExitStashNotFound(ctx.Stash)
 			return nil
 		}
 		return fmt.Errorf("failed to get stash: %w", err)
@@ -143,13 +164,13 @@ func runSet(cmd *cobra.Command, args []string) error {
 			if setAutoCreate {
 				// Validate column name before auto-creating
 				if model.IsReservedColumn(fieldName) {
-					fmt.Fprintf(os.Stderr, "Error: '%s' is a reserved column name\n", fieldName)
-					Exit(2)
+					ExitValidationError(fmt.Sprintf("'%s' is a reserved column name", fieldName),
+						map[string]interface{}{"column": fieldName})
 					return nil
 				}
 				if err := model.ValidateColumnName(fieldName); err != nil {
-					fmt.Fprintf(os.Stderr, "Error: invalid column name '%s': must start with a letter and contain only letters, numbers, and underscores\n", fieldName)
-					Exit(2)
+					ExitValidationError(fmt.Sprintf("invalid column name '%s': must start with a letter and contain only letters, numbers, and underscores", fieldName),
+						map[string]interface{}{"column": fieldName})
 					return nil
 				}
 
@@ -170,8 +191,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 					fmt.Printf("Auto-created column '%s'\n", fieldName)
 				}
 			} else {
-				fmt.Fprintf(os.Stderr, "Error: column '%s' not found\n", fieldName)
-				Exit(1)
+				ExitColumnNotFound(fieldName)
 				return nil
 			}
 		}
@@ -181,15 +201,12 @@ func runSet(cmd *cobra.Command, args []string) error {
 	record, err := store.GetRecord(ctx.Stash, recordID)
 	if err != nil {
 		if errors.Is(err, model.ErrRecordNotFound) {
-			fmt.Fprintf(os.Stderr, "Error: record '%s' not found\n", recordID)
-			Exit(4)
+			ExitRecordNotFound(recordID)
 			return nil
 		}
 		// AC-05: Reject update to deleted record
 		if errors.Is(err, model.ErrRecordDeleted) {
-			fmt.Fprintf(os.Stderr, "Error: record '%s' is deleted\n", recordID)
-			fmt.Fprintf(os.Stderr, "Hint: use `stash restore %s` first\n", recordID)
-			Exit(4)
+			ExitRecordDeleted(recordID)
 			return nil
 		}
 		return fmt.Errorf("failed to get record: %w", err)

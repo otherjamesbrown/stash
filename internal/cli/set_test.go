@@ -121,9 +121,9 @@ func TestUC_REC_002_UpdateRecord(t *testing.T) {
 		rootCmd.SetArgs([]string{"set", "inv-fake", "Price=100"})
 		rootCmd.Execute()
 
-		// Then: Command fails with exit code 4
-		if ExitCode != 4 {
-			t.Errorf("expected exit code 4, got %d", ExitCode)
+		// Then: Command fails with exit code 1 (record not found)
+		if ExitCode != 1 {
+			t.Errorf("expected exit code 1, got %d", ExitCode)
 		}
 	})
 

@@ -69,7 +69,35 @@ Examples:
   stash list --where "Category=electronics"
   stash list --where "Price>100" --where "Category=electronics"
   stash list --search "laptop"
-  stash list --columns "Name,Price"`,
+  stash list --columns "Name,Price"
+
+AI Agent Examples:
+  # Get all record IDs for batch processing
+  stash list --json | jq -r '.[]._id'
+
+  # Find unprocessed records
+  stash list --where "status IS NULL" --json | jq -r '.[]._id'
+
+  # Get records needing review (multiple conditions)
+  stash list --where "status=pending" --where "priority=high" --json
+
+  # Paginated processing
+  OFFSET=0
+  while true; do
+      BATCH=$(stash list --limit 100 --offset $OFFSET --json)
+      [ "$(echo "$BATCH" | jq 'length')" -eq 0 ] && break
+      echo "$BATCH" | jq -r '.[]._id' | while read id; do
+          # process record...
+      done
+      OFFSET=$((OFFSET + 100))
+  done
+
+  # Count records by extracting length
+  COUNT=$(stash list --where "status=complete" --json | jq 'length')
+
+Exit Codes:
+  0  Success
+  1  Stash not found`,
 	Args: cobra.NoArgs,
 	RunE: runList,
 }

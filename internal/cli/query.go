@@ -46,6 +46,36 @@ Examples:
   stash query "SELECT * FROM inventory" --csv --no-headers
   stash query "SELECT * FROM inventory" --csv --columns "Name,Price"
 
+AI Agent Examples:
+  # Get pending work queue
+  stash query "SELECT id, Name FROM tasks WHERE status IS NULL" --json | \
+      jq -r '.[] | "\(.id) \(.Name)"'
+
+  # Count by status for progress reporting
+  stash query "SELECT status, COUNT(*) as count FROM tasks GROUP BY status" --json
+
+  # Find unprocessed records older than 1 hour
+  stash query "SELECT id FROM tasks WHERE status IS NULL \
+      AND created_at < datetime('now', '-1 hour')" --json
+
+  # Export for external analysis
+  stash query "SELECT * FROM tasks WHERE status='complete'" --csv > report.csv
+
+  # Batch processing with LIMIT
+  while true; do
+      BATCH=$(stash query "SELECT id FROM tasks WHERE status='pending' LIMIT 10" --json)
+      [ "$(echo "$BATCH" | jq 'length')" -eq 0 ] && break
+      echo "$BATCH" | jq -r '.[].id' | while read id; do
+          stash set "$id" status="processing"
+          # process...
+      done
+  done
+
+Exit Codes:
+  0  Success
+  1  Stash not found
+  2  Invalid SQL (syntax error, non-SELECT statement)
+
 Note: This queries the SQLite cache, not the JSONL source. For most use
 cases, the cache is up-to-date, but after manual JSONL edits, run
 'stash repair' to rebuild the cache.`,
