@@ -1,3 +1,4 @@
+<!-- dev-setup-template: context/debug.md.template | version: 1.0.0 -->
 # Debug & Observability Configuration
 
 > Project-specific debugging resources. Used by debugger agent and developers.

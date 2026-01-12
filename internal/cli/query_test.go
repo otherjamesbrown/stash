@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,13 @@ import (
 
 	"github.com/user/stash/internal/storage"
 )
+
+// resetQueryFlags resets query command flags
+func resetQueryFlags() {
+	queryCSV = false
+	queryNoHeaders = false
+	queryColumns = ""
+}
 
 // TestUC_QRY_003_RawSQLQuery tests UC-QRY-003: Raw SQL Query
 func TestUC_QRY_003_RawSQLQuery(t *testing.T) {
@@ -291,6 +299,339 @@ func TestUC_QRY_003_RawSQLQuery_MustNot(t *testing.T) {
 		finalCount, _ := store.CountRecords("inventory")
 		if finalCount != initialCount {
 			t.Errorf("data was modified: expected %d records, got %d", initialCount, finalCount)
+		}
+	})
+}
+
+// TestQueryCSVOutput tests CSV output functionality for query command
+func TestQueryCSVOutput(t *testing.T) {
+	t.Run("CSV output with --csv flag", func(t *testing.T) {
+		// Given: Stash has records
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
+		defer cleanup()
+
+		// Create records
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Price=999"})
+		rootCmd.Execute()
+		resetFlags()
+		resetQueryFlags()
+		ExitCode = 0
+
+		rootCmd.SetArgs([]string{"add", "Mouse", "--set", "Price=25"})
+		rootCmd.Execute()
+		resetFlags()
+		resetQueryFlags()
+		ExitCode = 0
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT Name, Price FROM inventory" --csv`
+		rootCmd.SetArgs([]string{"query", "SELECT Name, Price FROM inventory", "--csv"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output is valid CSV
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Parse as CSV
+		reader := csv.NewReader(strings.NewReader(output))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("expected valid CSV, got error: %v\nOutput: %s", err, output)
+		}
+
+		// Should have header + 2 data rows
+		if len(records) != 3 {
+			t.Errorf("expected 3 rows (header + 2 records), got %d", len(records))
+		}
+
+		// Check header
+		if records[0][0] != "Name" || records[0][1] != "Price" {
+			t.Errorf("expected header [Name, Price], got %v", records[0])
+		}
+
+		// Data should be present
+		foundLaptop := false
+		foundMouse := false
+		for i := 1; i < len(records); i++ {
+			if records[i][0] == "Laptop" {
+				foundLaptop = true
+			}
+			if records[i][0] == "Mouse" {
+				foundMouse = true
+			}
+		}
+		if !foundLaptop {
+			t.Error("expected to find Laptop in CSV output")
+		}
+		if !foundMouse {
+			t.Error("expected to find Mouse in CSV output")
+		}
+	})
+
+	t.Run("CSV output with --no-headers flag", func(t *testing.T) {
+		// Given: Stash has records
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Price=999"})
+		rootCmd.Execute()
+		resetFlags()
+		resetQueryFlags()
+		ExitCode = 0
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT Name, Price FROM inventory" --csv --no-headers`
+		rootCmd.SetArgs([]string{"query", "SELECT Name, Price FROM inventory", "--csv", "--no-headers"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output is CSV without header
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Parse as CSV
+		reader := csv.NewReader(strings.NewReader(output))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("expected valid CSV, got error: %v\nOutput: %s", err, output)
+		}
+
+		// Should have only 1 data row (no header)
+		if len(records) != 1 {
+			t.Errorf("expected 1 row (no header), got %d", len(records))
+		}
+
+		// First row should be data, not header
+		if records[0][0] != "Laptop" {
+			t.Errorf("expected first row to be data 'Laptop', got %v", records[0][0])
+		}
+	})
+
+	t.Run("CSV output with --columns flag for column selection", func(t *testing.T) {
+		// Given: Stash has records with multiple fields
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price", "Category"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Price=999", "--set", "Category=electronics"})
+		rootCmd.Execute()
+		resetFlags()
+		resetQueryFlags()
+		ExitCode = 0
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT * FROM inventory" --csv --columns "Name,Price"`
+		rootCmd.SetArgs([]string{"query", "SELECT * FROM inventory", "--csv", "--columns", "Name,Price"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output contains only selected columns
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Parse as CSV
+		reader := csv.NewReader(strings.NewReader(output))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("expected valid CSV, got error: %v\nOutput: %s", err, output)
+		}
+
+		// Should have header + 1 data row
+		if len(records) != 2 {
+			t.Errorf("expected 2 rows (header + 1 record), got %d", len(records))
+		}
+
+		// Check header has only selected columns
+		if len(records[0]) != 2 {
+			t.Errorf("expected 2 columns, got %d", len(records[0]))
+		}
+		if records[0][0] != "Name" || records[0][1] != "Price" {
+			t.Errorf("expected header [Name, Price], got %v", records[0])
+		}
+	})
+
+	t.Run("CSV properly escapes special characters", func(t *testing.T) {
+		// Given: Stash has records with special characters
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Description"})
+		defer cleanup()
+
+		// Create a record with commas and quotes in the value
+		rootCmd.SetArgs([]string{"add", "Item, with comma", "--set", `Description=Contains "quotes" and, commas`})
+		rootCmd.Execute()
+		resetFlags()
+		resetQueryFlags()
+		ExitCode = 0
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT Name, Description FROM inventory" --csv`
+		rootCmd.SetArgs([]string{"query", "SELECT Name, Description FROM inventory", "--csv"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output is valid CSV with proper escaping
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Parse as CSV - this will fail if escaping is incorrect
+		reader := csv.NewReader(strings.NewReader(output))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("CSV parsing failed (bad escaping): %v\nOutput: %s", err, output)
+		}
+
+		// Should have header + 1 data row
+		if len(records) != 2 {
+			t.Errorf("expected 2 rows, got %d", len(records))
+		}
+
+		// Data row should have correctly parsed values
+		if records[1][0] != "Item, with comma" {
+			t.Errorf("expected Name to be 'Item, with comma', got '%s'", records[1][0])
+		}
+		if records[1][1] != `Contains "quotes" and, commas` {
+			t.Errorf("expected Description with special chars, got '%s'", records[1][1])
+		}
+	})
+
+	t.Run("CSV output with empty result set", func(t *testing.T) {
+		// Given: Stash has no records
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
+		defer cleanup()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT Name, Price FROM inventory" --csv`
+		rootCmd.SetArgs([]string{"query", "SELECT Name, Price FROM inventory", "--csv"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output is CSV with only header
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Parse as CSV
+		reader := csv.NewReader(strings.NewReader(output))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("expected valid CSV, got error: %v\nOutput: %s", err, output)
+		}
+
+		// Should have only header row
+		if len(records) != 1 {
+			t.Errorf("expected 1 row (header only), got %d", len(records))
+		}
+
+		// Check header
+		if records[0][0] != "Name" || records[0][1] != "Price" {
+			t.Errorf("expected header [Name, Price], got %v", records[0])
+		}
+	})
+
+	t.Run("CSV with --no-headers and empty result gives no output", func(t *testing.T) {
+		// Given: Stash has no records
+		_, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
+		defer cleanup()
+		resetQueryFlags()
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// When: User runs `stash query "SELECT Name, Price FROM inventory" --csv --no-headers`
+		rootCmd.SetArgs([]string{"query", "SELECT Name, Price FROM inventory", "--csv", "--no-headers"})
+		err := rootCmd.Execute()
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		buf := make([]byte, 8192)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		// Then: Output should be empty
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Output should be empty (no header, no data)
+		trimmed := strings.TrimSpace(output)
+		if trimmed != "" {
+			t.Errorf("expected empty output, got '%s'", output)
 		}
 	})
 }

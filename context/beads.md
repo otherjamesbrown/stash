@@ -1,3 +1,4 @@
+<!-- dev-setup-template: context/beads.md.template | version: 1.0.0 -->
 # Beads Workflow
 
 > **Prefix**: `st-` | All work tracked as beads issues

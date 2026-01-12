@@ -20,6 +20,7 @@ func resetFlags() {
 	addParentID = ""
 	// Reset set command flags
 	setColFlags = nil
+	setAutoCreate = false
 	// Reset show command flags
 	showWithFiles = false
 	showHistory = false
@@ -59,6 +60,15 @@ func resetFlags() {
 	moveParentID = ""
 	// Reset init-claude command flags
 	forceInstall = false
+	// Reset query command flags
+	queryCSV = false
+	queryNoHeaders = false
+	queryColumns = ""
+	// Reset bulk-set command flags
+	bulkSetWhere = nil
+	bulkSetSet = nil
+	// Reset search command flags
+	searchIn = nil
 	// Reset global flags
 	jsonOutput = false
 	stashName = ""

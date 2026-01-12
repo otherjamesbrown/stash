@@ -16,6 +16,7 @@ import (
 )
 
 var setColFlags []string
+var setAutoCreate bool
 
 var setCmd = &cobra.Command{
 	Use:   "set <id> <field>=<value> | set <id> --col <field> <value> [--col <field> <value>...]",
@@ -28,18 +29,23 @@ Single field update:
 Multiple field update:
   stash set inv-ex4j --col Price 1299 --col Stock 50
 
+Auto-create columns:
+  stash set inv-ex4j NewField=value --auto-create
+
 Note: Cannot update deleted records. Use 'stash restore' first.
 
 Examples:
   stash set inv-ex4j Price=1299
   stash set inv-ex4j --col Price 1299 --col Stock 50
-  stash set inv-ex4j Notes=""  # Clear a field`,
+  stash set inv-ex4j Notes=""  # Clear a field
+  stash set inv-ex4j Category=Electronics --auto-create  # Create column if needed`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runSet,
 }
 
 func init() {
 	setCmd.Flags().StringArrayVar(&setColFlags, "col", nil, "Set field value: --col Field Value (can be repeated)")
+	setCmd.Flags().BoolVar(&setAutoCreate, "auto-create", false, "Automatically create columns that don't exist")
 	rootCmd.AddCommand(setCmd)
 }
 
@@ -131,12 +137,43 @@ func runSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get stash: %w", err)
 	}
 
-	// AC-04: Validate all columns exist before making changes
+	// AC-04: Validate all columns exist before making changes, or auto-create if flag is set
 	for fieldName := range updates {
 		if !stash.Columns.Exists(fieldName) {
-			fmt.Fprintf(os.Stderr, "Error: column '%s' not found\n", fieldName)
-			Exit(1)
-			return nil
+			if setAutoCreate {
+				// Validate column name before auto-creating
+				if model.IsReservedColumn(fieldName) {
+					fmt.Fprintf(os.Stderr, "Error: '%s' is a reserved column name\n", fieldName)
+					Exit(2)
+					return nil
+				}
+				if err := model.ValidateColumnName(fieldName); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: invalid column name '%s': must start with a letter and contain only letters, numbers, and underscores\n", fieldName)
+					Exit(2)
+					return nil
+				}
+
+				// Auto-create the column
+				col := model.Column{
+					Name:    fieldName,
+					Added:   time.Now(),
+					AddedBy: ctx.Actor,
+				}
+				if err := store.AddColumn(ctx.Stash, col); err != nil {
+					return fmt.Errorf("failed to auto-create column '%s': %w", fieldName, err)
+				}
+
+				// Update local stash reference
+				stash.Columns = append(stash.Columns, col)
+
+				if IsVerbose() && !IsQuiet() {
+					fmt.Printf("Auto-created column '%s'\n", fieldName)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: column '%s' not found\n", fieldName)
+				Exit(1)
+				return nil
+			}
 		}
 	}
 

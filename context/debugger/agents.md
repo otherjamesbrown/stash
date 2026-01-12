@@ -1,3 +1,4 @@
+<!-- dev-setup-template: context/debugger/agents.md.template | version: 1.0.0 -->
 # Debugger Agent Context
 
 > **Inherits**: context/agents.md | **Type**: Read-only investigator

@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,12 @@ import (
 	"github.com/user/stash/internal/storage"
 )
 
+var (
+	queryCSV       bool
+	queryNoHeaders bool
+	queryColumns   string
+)
+
 var queryCmd = &cobra.Command{
 	Use:   "query <sql>",
 	Short: "Run a raw SQL query against the cache",
@@ -24,11 +31,20 @@ SQLite cache for complex queries, aggregations, and joins.
 
 The table name is the stash name (with hyphens replaced by underscores).
 
+Output formats:
+  --json         Output as JSON array (default for machine parsing)
+  --csv          Output as CSV with headers
+  --no-headers   Omit header row in CSV output (for scripting)
+  --columns      Select specific columns in CSV output (comma-separated)
+
 Examples:
   stash query "SELECT Name, Price FROM inventory WHERE Price > 100"
   stash query "SELECT Category, COUNT(*) FROM inventory GROUP BY Category"
   stash query "SELECT * FROM inventory ORDER BY updated_at DESC LIMIT 10"
   stash query "SELECT * FROM inventory" --json
+  stash query "SELECT * FROM inventory" --csv
+  stash query "SELECT * FROM inventory" --csv --no-headers
+  stash query "SELECT * FROM inventory" --csv --columns "Name,Price"
 
 Note: This queries the SQLite cache, not the JSONL source. For most use
 cases, the cache is up-to-date, but after manual JSONL edits, run
@@ -38,6 +54,9 @@ cases, the cache is up-to-date, but after manual JSONL edits, run
 }
 
 func init() {
+	queryCmd.Flags().BoolVar(&queryCSV, "csv", false, "Output as CSV format")
+	queryCmd.Flags().BoolVar(&queryNoHeaders, "no-headers", false, "Omit header row in CSV output")
+	queryCmd.Flags().StringVar(&queryColumns, "columns", "", "Select specific columns in CSV output (comma-separated)")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -130,6 +149,11 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// CSV output
+	if queryCSV {
+		return outputQueryCSV(rows, columns)
+	}
+
 	// AC-01, AC-04: Human-readable output
 	if len(rows) == 0 {
 		fmt.Println("No results.")
@@ -181,6 +205,47 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\n%d row(s)\n", len(rows))
+
+	return nil
+}
+
+// outputQueryCSV outputs query results in CSV format.
+func outputQueryCSV(rows []map[string]interface{}, columns []string) error {
+	// Determine which columns to output
+	outputColumns := columns
+	if queryColumns != "" {
+		// Parse comma-separated column list
+		outputColumns = nil
+		for _, col := range strings.Split(queryColumns, ",") {
+			col = strings.TrimSpace(col)
+			if col != "" {
+				outputColumns = append(outputColumns, col)
+			}
+		}
+	}
+
+	writer := csv.NewWriter(os.Stdout)
+	defer writer.Flush()
+
+	// Write header unless --no-headers is specified
+	if !queryNoHeaders {
+		if err := writer.Write(outputColumns); err != nil {
+			return fmt.Errorf("failed to write CSV header: %w", err)
+		}
+	}
+
+	// Write data rows
+	for _, row := range rows {
+		rowData := make([]string, len(outputColumns))
+		for i, col := range outputColumns {
+			if val, ok := row[col]; ok {
+				rowData[i] = fmt.Sprintf("%v", val)
+			}
+		}
+		if err := writer.Write(rowData); err != nil {
+			return fmt.Errorf("failed to write CSV row: %w", err)
+		}
+	}
 
 	return nil
 }

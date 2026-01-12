@@ -335,3 +335,252 @@ func TestUC_REC_002_UpdateRecord_JSONOutput(t *testing.T) {
 		}
 	})
 }
+
+// TestUC_REC_002_UpdateRecord_AutoCreate tests the --auto-create flag for auto-column creation
+func TestUC_REC_002_UpdateRecord_AutoCreate(t *testing.T) {
+	t.Run("AC-01: auto-create single column when flag is set", func(t *testing.T) {
+		// Given: Record exists, but column "NewField" does not exist
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> NewField=value --auto-create`
+		rootCmd.SetArgs([]string{"set", recordID, "NewField=testvalue", "--auto-create"})
+		err := rootCmd.Execute()
+
+		// Then: Command succeeds
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Then: Column is created and field is set
+		store, _ = storage.NewStore(filepath.Join(tempDir, ".stash"))
+		defer store.Close()
+
+		// Verify column exists
+		stash, _ := store.GetStash("inventory")
+		if !stash.Columns.Exists("NewField") {
+			t.Error("expected column 'NewField' to be created")
+		}
+
+		// Verify field value is set
+		rec, _ := store.GetRecord("inventory", recordID)
+		if fmt.Sprintf("%v", rec.Fields["NewField"]) != "testvalue" {
+			t.Errorf("expected NewField='testvalue', got '%v'", rec.Fields["NewField"])
+		}
+	})
+
+	t.Run("AC-02: auto-create multiple columns when flag is set", func(t *testing.T) {
+		// Given: Record exists, but columns "Field1" and "Field2" do not exist
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> --col Field1=val1 --col Field2=val2 --auto-create`
+		rootCmd.SetArgs([]string{"set", recordID, "--col", "Field1=val1", "--col", "Field2=val2", "--auto-create"})
+		err := rootCmd.Execute()
+
+		// Then: Command succeeds
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Then: Both columns are created and fields are set
+		store, _ = storage.NewStore(filepath.Join(tempDir, ".stash"))
+		defer store.Close()
+
+		stash, _ := store.GetStash("inventory")
+		if !stash.Columns.Exists("Field1") {
+			t.Error("expected column 'Field1' to be created")
+		}
+		if !stash.Columns.Exists("Field2") {
+			t.Error("expected column 'Field2' to be created")
+		}
+
+		rec, _ := store.GetRecord("inventory", recordID)
+		if fmt.Sprintf("%v", rec.Fields["Field1"]) != "val1" {
+			t.Errorf("expected Field1='val1', got '%v'", rec.Fields["Field1"])
+		}
+		if fmt.Sprintf("%v", rec.Fields["Field2"]) != "val2" {
+			t.Errorf("expected Field2='val2', got '%v'", rec.Fields["Field2"])
+		}
+	})
+
+	t.Run("AC-03: without flag, non-existent column still fails", func(t *testing.T) {
+		// Given: Record exists, column "NewField" does not exist
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> NewField=value` WITHOUT --auto-create
+		rootCmd.SetArgs([]string{"set", recordID, "NewField=testvalue"})
+		rootCmd.Execute()
+
+		// Then: Command fails with exit code 1 (column not found)
+		if ExitCode != 1 {
+			t.Errorf("expected exit code 1, got %d", ExitCode)
+		}
+
+		// Then: Column is NOT created
+		store, _ = storage.NewStore(filepath.Join(tempDir, ".stash"))
+		defer store.Close()
+
+		stash, _ := store.GetStash("inventory")
+		if stash.Columns.Exists("NewField") {
+			t.Error("expected column 'NewField' to NOT be created")
+		}
+	})
+
+	t.Run("AC-04: auto-create with existing columns works normally", func(t *testing.T) {
+		// Given: Record exists with columns Name and Price
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> Price=999 --auto-create` (Price already exists)
+		rootCmd.SetArgs([]string{"set", recordID, "Price=999", "--auto-create"})
+		err := rootCmd.Execute()
+
+		// Then: Command succeeds without creating duplicate column
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Verify field is updated
+		store, _ = storage.NewStore(filepath.Join(tempDir, ".stash"))
+		defer store.Close()
+
+		rec, _ := store.GetRecord("inventory", recordID)
+		if fmt.Sprintf("%v", rec.Fields["Price"]) != "999" {
+			t.Errorf("expected Price='999', got '%v'", rec.Fields["Price"])
+		}
+	})
+
+	t.Run("AC-05: auto-create with invalid column name fails", func(t *testing.T) {
+		// Given: Record exists
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> _invalid=value --auto-create` (reserved name)
+		rootCmd.SetArgs([]string{"set", recordID, "_id=testvalue", "--auto-create"})
+		rootCmd.Execute()
+
+		// Then: Command fails (reserved column name)
+		if ExitCode == 0 {
+			t.Error("expected non-zero exit code for reserved column name")
+		}
+	})
+
+	t.Run("AC-06: auto-create mixed new and existing columns", func(t *testing.T) {
+		// Given: Record exists with column Name, but not Category
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name"})
+		defer cleanup()
+
+		// Create a record
+		rootCmd.SetArgs([]string{"add", "Laptop"})
+		rootCmd.Execute()
+
+		// Get the record ID
+		store, _ := storage.NewStore(filepath.Join(tempDir, ".stash"))
+		records, _ := store.ListRecords("inventory", storage.ListOptions{ParentID: "*"})
+		recordID := records[0].ID
+		store.Close()
+
+		ExitCode = 0
+
+		// When: User runs `stash set <id> Name=UpdatedName Category=Electronics --auto-create`
+		rootCmd.SetArgs([]string{"set", recordID, "Name=UpdatedName", "Category=Electronics", "--auto-create"})
+		err := rootCmd.Execute()
+
+		// Then: Command succeeds
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		// Verify both fields are set
+		store, _ = storage.NewStore(filepath.Join(tempDir, ".stash"))
+		defer store.Close()
+
+		// Verify new column exists
+		stash, _ := store.GetStash("inventory")
+		if !stash.Columns.Exists("Category") {
+			t.Error("expected column 'Category' to be created")
+		}
+
+		rec, _ := store.GetRecord("inventory", recordID)
+		if fmt.Sprintf("%v", rec.Fields["Name"]) != "UpdatedName" {
+			t.Errorf("expected Name='UpdatedName', got '%v'", rec.Fields["Name"])
+		}
+		if fmt.Sprintf("%v", rec.Fields["Category"]) != "Electronics" {
+			t.Errorf("expected Category='Electronics', got '%v'", rec.Fields["Category"])
+		}
+	})
+}

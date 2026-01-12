@@ -1,3 +1,4 @@
+<!-- dev-setup-template: ARCHITECTURE.md.template | version: 1.0.0 -->
 # Stash Architecture
 
 > **Last verified**: 2026-01-08 | **Commit**: b423181

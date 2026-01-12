@@ -1,3 +1,4 @@
+<!-- dev-setup-template: claude/agents/go-developer.md.template | version: 1.0.0 -->
 ---
 name: go-developer
 description: |

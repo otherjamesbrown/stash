@@ -1,3 +1,4 @@
+<!-- dev-setup-template: claude/commands/pickup.md | version: 1.0.0 -->
 # Session Pickup
 
 Resume work from a previous session using a handoff bead.

@@ -1,3 +1,4 @@
+<!-- dev-setup-template: context/agents.md.template | version: 1.0.0 -->
 # Agent Rules
 
 > **Last verified**: 2026-01-08 | **Commit**: b423181
@@ -25,14 +26,26 @@
 ## Before Starting Work
 
 ```bash
-# 1. Find existing bead or create new one
+# 1. Check for blockers to new work
+bd list --status open --priority 0    # Any P0? Fix first!
+bd list --status open --priority 1    # P1s >7 days? Address first.
+bd list --status in_progress          # Already ≥3? Finish something.
+
+# 2. Find existing bead or create new one
 bd ready                    # Find unblocked tasks
 bd list --status open       # All open issues
 bd create --title="..." --type=task
 
-# 2. Claim the work
+# 3. Claim the work
 bd update <id> --status in_progress
 ```
+
+**Cannot start new work if:**
+- Any P0 exists (fix it first)
+- You have ≥3 independent work streams in_progress (finish something first)
+  - Exception: Sub-beads of the same epic count as 1 stream
+  - Parallel agents working on related tasks under one epic is fine
+- A P1 has been open >7 days (address it)
 
 ---
 
@@ -83,6 +96,42 @@ git status                  # MUST show "up to date with origin"
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 - Create beads for any remaining work before ending
+
+---
+
+## Preventing Bead Drift
+
+**At decision points** (when mentioning multiple beads but user picks one):
+
+```markdown
+"Before I start on <chosen-bead>: there are also:
+- <other-bead-1> (P2): <description>
+- <other-bead-2> (P2): <description>
+
+Should I:
+1. Fix chosen now, then address the others
+2. Defer others to next session (I'll add review dates)
+3. Close others as won't-fix
+
+Which approach?"
+```
+
+**At session end** (if open beads remain):
+
+```markdown
+"Before we finish, I see X open beads from this session:
+- <bead-1> (P2): <description>
+- <bead-2> (P3): <description>
+
+Should I:
+1. Fix them now
+2. Defer with review dates
+3. Close as won't-fix
+
+Don't want to leave orphaned beads."
+```
+
+**NEVER** leave beads mentioned but undecided.
 
 ---
 

@@ -1,3 +1,4 @@
+<!-- dev-setup-template: claude/agents/debugger.md.template | version: 1.0.0 -->
 ---
 name: debugger
 description: |

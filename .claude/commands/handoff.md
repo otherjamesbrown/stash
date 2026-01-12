@@ -1,3 +1,4 @@
+<!-- dev-setup-template: claude/commands/handoff.md | version: 1.0.0 -->
 # Session Handoff
 
 Create a handoff bead to preserve context for resuming work in a new session.

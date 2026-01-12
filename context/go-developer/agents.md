@@ -1,3 +1,4 @@
+<!-- dev-setup-template: context/go-developer/agents.md.template | version: 1.0.0 -->
 # Go Developer Context
 
 > **Inherits**: context/agents.md | **Type**: Implementation agent
