@@ -11,7 +11,10 @@ import (
 	"github.com/user/stash/internal/context"
 )
 
-var forceInstall bool
+var (
+	forceInstall  bool
+	updateInstall bool
+)
 
 var initClaudeCmd = &cobra.Command{
 	Use:   "init-claude",
@@ -23,21 +26,37 @@ This command sets up Claude Code integration by:
   2. Adding stash:* to .claude/settings.json allowedBashCommands
   3. Appending onboarding snippet to CLAUDE.md
 
+Flags:
+  --force    Overwrite all existing files
+  --update   Smart update: only update changed files, show diff
+
 Examples:
-  stash init-claude           # Install Claude integration
-  stash init-claude --force   # Overwrite existing files`,
+  stash init-claude             # Install Claude integration (first time)
+  stash init-claude --update    # Update to latest version (smart merge)
+  stash init-claude --force     # Overwrite all files
+
+AI Agent Examples:
+  # Check and update after stash upgrade
+  stash upgrade status --json | jq -e '.upgraded' && stash init-claude --update
+
+Exit Codes:
+  0  Success
+  1  Already installed (use --force or --update)`,
 	Args: cobra.NoArgs,
 	RunE: runInitClaude,
 }
 
 func init() {
 	initClaudeCmd.Flags().BoolVar(&forceInstall, "force", false, "Overwrite existing files")
+	initClaudeCmd.Flags().BoolVar(&updateInstall, "update", false, "Smart update: only update changed files")
 	rootCmd.AddCommand(initClaudeCmd)
 }
 
 // initClaudeResult holds the result of the init-claude command for JSON output.
 type initClaudeResult struct {
 	InstalledFiles   []string `json:"installed_files"`
+	UpdatedFiles     []string `json:"updated_files,omitempty"`
+	SkippedFiles     []string `json:"skipped_files,omitempty"`
 	SettingsUpdated  bool     `json:"settings_updated"`
 	ClaudeMDUpdated  bool     `json:"claude_md_updated"`
 	SettingsCreated  bool     `json:"settings_created"`
@@ -47,17 +66,19 @@ type initClaudeResult struct {
 func runInitClaude(cmd *cobra.Command, args []string) error {
 	result := initClaudeResult{
 		InstalledFiles: []string{},
+		UpdatedFiles:   []string{},
+		SkippedFiles:   []string{},
 	}
 
-	// Check if already installed (unless --force)
+	// Check if already installed (unless --force or --update)
 	commandsDir := filepath.Join(".claude", "commands", "stash")
-	if !forceInstall {
+	if !forceInstall && !updateInstall {
 		if _, err := os.Stat(commandsDir); err == nil {
 			// Directory exists, check for files
 			entries, _ := os.ReadDir(commandsDir)
 			if len(entries) > 0 {
 				fmt.Fprintln(os.Stderr, "Error: Claude integration already installed")
-				fmt.Fprintln(os.Stderr, "Use --force to overwrite existing files")
+				fmt.Fprintln(os.Stderr, "Use --update for smart update or --force to overwrite all files")
 				Exit(1)
 				return nil
 			}
@@ -78,6 +99,26 @@ func runInitClaude(cmd *cobra.Command, args []string) error {
 		}
 
 		destPath := filepath.Join(commandsDir, filename)
+
+		// In update mode, check if file changed
+		if updateInstall {
+			existing, err := os.ReadFile(destPath)
+			if err == nil {
+				// File exists, compare content
+				if string(existing) == string(content) {
+					result.SkippedFiles = append(result.SkippedFiles, destPath)
+					continue
+				}
+				// Content differs, update it
+				if err := os.WriteFile(destPath, content, 0644); err != nil {
+					return fmt.Errorf("failed to write %s: %w", destPath, err)
+				}
+				result.UpdatedFiles = append(result.UpdatedFiles, destPath)
+				continue
+			}
+			// File doesn't exist, create it
+		}
+
 		if err := os.WriteFile(destPath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", destPath, err)
 		}
@@ -105,12 +146,29 @@ func runInitClaude(cmd *cobra.Command, args []string) error {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(data))
 	} else if !IsQuiet() {
-		fmt.Println("Claude Code integration installed successfully!")
-		fmt.Println()
-		fmt.Println("Slash commands installed:")
-		for _, f := range result.InstalledFiles {
-			fmt.Printf("  %s\n", f)
+		if updateInstall {
+			fmt.Println("Claude Code integration updated!")
+		} else {
+			fmt.Println("Claude Code integration installed successfully!")
 		}
+		fmt.Println()
+
+		if len(result.InstalledFiles) > 0 {
+			fmt.Println("Files installed:")
+			for _, f := range result.InstalledFiles {
+				fmt.Printf("  + %s\n", f)
+			}
+		}
+		if len(result.UpdatedFiles) > 0 {
+			fmt.Println("Files updated:")
+			for _, f := range result.UpdatedFiles {
+				fmt.Printf("  ~ %s\n", f)
+			}
+		}
+		if updateInstall && len(result.SkippedFiles) > 0 {
+			fmt.Printf("Files unchanged: %d\n", len(result.SkippedFiles))
+		}
+
 		fmt.Println()
 		if result.SettingsCreated {
 			fmt.Println("Created .claude/settings.json with stash:* permission")
@@ -133,6 +191,12 @@ func runInitClaude(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// resetInitClaudeFlags resets the init-claude flags for testing.
+func resetInitClaudeFlags() {
+	forceInstall = false
+	updateInstall = false
 }
 
 // updateClaudeSettings updates .claude/settings.json to include stash:* in allowedBashCommands.

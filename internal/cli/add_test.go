@@ -65,6 +65,10 @@ func resetFlags() {
 	moveParentID = ""
 	// Reset init-claude command flags
 	forceInstall = false
+	updateInstall = false
+	// Reset migrate command flags
+	migrateDryRun = false
+	migrateInspect = false
 	// Reset query command flags
 	queryCSV = false
 	queryNoHeaders = false
