@@ -33,10 +33,16 @@ Run ` + "`stash prime`" + ` for workflow context.
 ### Quick Reference
 
 ` + "```" + `bash
-# Setup (column-first workflow)
-stash init <name> --prefix <pfx>-
-stash column add <col1> <col2> ...   # Required before adding records
-stash add "value" --set field=value
+# 1. Initialize stash
+stash init mydata --prefix dat-
+
+# 2. Define columns (names: letters, numbers, underscores only - no hyphens)
+stash column add company_name
+stash column add status
+stash column add notes
+
+# 3. Add records
+stash add "Acme Corp" --set status=active
 
 # Working with records
 stash list                           # List all

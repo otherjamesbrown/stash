@@ -259,11 +259,19 @@ Stash is a structured data store for collecting and querying data.
 ### Quick Reference
 
 ` + "```" + `bash
+# 1. Initialize stash
+stash init mydata --prefix dat-
+
+# 2. Define columns (names: letters, numbers, underscores only - no hyphens)
+stash column add company_name
+stash column add status
+stash column add notes
+
+# 3. Add records
+stash add "Acme Corp" --set status=active
+
 # View all stashes and status
 stash info
-
-# Add a record (primary value goes to first column)
-stash add "value" --set field=value
 
 # List records
 stash list

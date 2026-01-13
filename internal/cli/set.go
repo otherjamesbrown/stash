@@ -63,7 +63,8 @@ Exit Codes:
   0  Success - record updated
   1  Record or column not found
   2  Validation error (invalid format, reserved column name)
-  3  Record is deleted (use 'stash restore' first)`,
+  3  Record is deleted (use 'stash restore' first)
+  5  Record is locked by another agent`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runSet,
 }
@@ -210,6 +211,16 @@ func runSet(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		return fmt.Errorf("failed to get record: %w", err)
+	}
+
+	// Check for lock by another agent
+	lock, err := CheckLock(ctx.StashDir, ctx.Stash, recordID, ctx.Actor)
+	if err != nil {
+		return fmt.Errorf("failed to check lock: %w", err)
+	}
+	if lock != nil {
+		ExitRecordLocked(recordID, lock)
+		return nil
 	}
 
 	// Apply updates to fields

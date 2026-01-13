@@ -69,6 +69,9 @@ func resetFlags() {
 	bulkSetSet = nil
 	// Reset search command flags
 	searchIn = nil
+	// Reset status command flags
+	statusProcessing = true
+	statusAgent = ""
 	// Reset global flags
 	jsonOutput = false
 	stashName = ""
