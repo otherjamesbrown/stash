@@ -142,6 +142,24 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		fields[fieldName] = fieldValue
 	}
 
+	// Validate fields against column constraints
+	validationResult := ValidateFields(stash, fields)
+	if !validationResult.Valid {
+		// Report first validation error
+		if len(validationResult.Errors) > 0 {
+			err := validationResult.Errors[0]
+			ExitValidationError(err.Message,
+				map[string]interface{}{
+					"column": err.Column,
+					"value":  err.Value,
+					"rule":   err.Rule,
+				})
+			return nil
+		}
+		ExitValidationError("validation failed", nil)
+		return nil
+	}
+
 	// Handle parent ID for child records (AC-03, AC-04)
 	var recordID string
 	var parentID string

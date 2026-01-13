@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,7 +15,12 @@ import (
 	"github.com/user/stash/internal/storage"
 )
 
-var columnDesc string
+var (
+	columnDesc     string
+	columnValidate string
+	columnEnum     string
+	columnRequired bool
+)
 
 var columnCmd = &cobra.Command{
 	Use:     "column",
@@ -48,10 +54,37 @@ Column names must:
 The first column added becomes the "primary" column used for
 the default value in 'stash add' commands.
 
+Validation Options:
+  --validate TYPE  Validate format: email, url, number, date
+  --enum VALUES    Comma-separated list of allowed values
+  --required       Field must have a non-empty value
+
 Examples:
   stash column add Name
   stash column add Name Price Category
-  stash column add Price --desc "Price in USD"`,
+  stash column add Price --desc "Price in USD"
+  stash column add email --validate email
+  stash column add status --enum "pending,active,closed"
+  stash column add priority --required
+
+AI Agent Examples:
+  # Add email column with validation
+  stash column add contact_email --validate email --desc "Primary contact email"
+
+  # Add status column with enum constraint
+  stash column add status --enum "pending,active,closed" --required
+
+  # Check column constraints
+  stash column list --json | jq '.[] | select(.validate != null)'
+
+Exit Codes:
+  0  Success - column added
+  1  Stash not found, column already exists
+  2  Validation error (invalid column name, invalid validation type)
+
+JSON Output (--json):
+  [{"name": "email", "validate": "email", "required": false}]
+`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runColumnAdd,
 }
@@ -86,6 +119,9 @@ Examples:
 
 func init() {
 	columnAddCmd.Flags().StringVar(&columnDesc, "desc", "", "Column description")
+	columnAddCmd.Flags().StringVar(&columnValidate, "validate", "", "Validation type: email, url, number, date")
+	columnAddCmd.Flags().StringVar(&columnEnum, "enum", "", "Comma-separated list of allowed values")
+	columnAddCmd.Flags().BoolVar(&columnRequired, "required", false, "Field is required (non-empty)")
 
 	columnCmd.AddCommand(columnAddCmd)
 	columnCmd.AddCommand(columnListCmd)
@@ -132,11 +168,36 @@ func runColumnAdd(cmd *cobra.Command, args []string) error {
 	var addedColumns []model.Column
 	now := time.Now()
 
-	// If --desc is provided, only one column name is allowed
-	if columnDesc != "" && len(args) > 1 {
-		fmt.Fprintln(os.Stderr, "Error: --desc can only be used when adding a single column")
+	// If any constraint flags are provided, only one column name is allowed
+	hasConstraints := columnDesc != "" || columnValidate != "" || columnEnum != "" || columnRequired
+	if hasConstraints && len(args) > 1 {
+		fmt.Fprintln(os.Stderr, "Error: --desc, --validate, --enum, and --required can only be used when adding a single column")
 		Exit(2)
 		return nil
+	}
+
+	// Validate the --validate flag value
+	if columnValidate != "" && !IsValidValidationType(columnValidate) {
+		fmt.Fprintf(os.Stderr, "Error: invalid validation type '%s' (valid types: %s)\n",
+			columnValidate, strings.Join(ValidValidationTypes, ", "))
+		Exit(2)
+		return nil
+	}
+
+	// Parse enum values
+	var enumValues []string
+	if columnEnum != "" {
+		for _, v := range strings.Split(columnEnum, ",") {
+			trimmed := strings.TrimSpace(v)
+			if trimmed != "" {
+				enumValues = append(enumValues, trimmed)
+			}
+		}
+		if len(enumValues) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: --enum requires at least one non-empty value")
+			Exit(2)
+			return nil
+		}
 	}
 
 	// Add each column
@@ -166,10 +227,13 @@ func runColumnAdd(cmd *cobra.Command, args []string) error {
 		}
 
 		col := model.Column{
-			Name:    name,
-			Desc:    columnDesc,
-			Added:   now,
-			AddedBy: ctx.Actor,
+			Name:     name,
+			Desc:     columnDesc,
+			Added:    now,
+			AddedBy:  ctx.Actor,
+			Validate: columnValidate,
+			Enum:     enumValues,
+			Required: columnRequired,
 		}
 
 		if err := store.AddColumn(ctx.Stash, col); err != nil {
@@ -201,6 +265,9 @@ func runColumnAdd(cmd *cobra.Command, args []string) error {
 				"desc":     col.Desc,
 				"added":    col.Added.Format(time.RFC3339),
 				"added_by": col.AddedBy,
+				"validate": col.Validate,
+				"enum":     col.Enum,
+				"required": col.Required,
 			}
 		}
 		data, _ := json.Marshal(output)
@@ -222,18 +289,24 @@ func runColumnAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Reset flag for next call (important for tests)
+	// Reset flags for next call (important for tests)
 	columnDesc = ""
+	columnValidate = ""
+	columnEnum = ""
+	columnRequired = false
 
 	return nil
 }
 
 // ColumnInfo represents column information for list output
 type ColumnInfo struct {
-	Name      string `json:"name"`
-	Desc      string `json:"desc"`
-	Populated int    `json:"populated"`
-	Empty     int    `json:"empty"`
+	Name      string   `json:"name"`
+	Desc      string   `json:"desc"`
+	Validate  string   `json:"validate,omitempty"`
+	Enum      []string `json:"enum,omitempty"`
+	Required  bool     `json:"required,omitempty"`
+	Populated int      `json:"populated"`
+	Empty     int      `json:"empty"`
 }
 
 func runColumnList(cmd *cobra.Command, args []string) error {
@@ -284,8 +357,11 @@ func runColumnList(cmd *cobra.Command, args []string) error {
 	columnInfos := make([]ColumnInfo, len(stash.Columns))
 	for i, col := range stash.Columns {
 		columnInfos[i] = ColumnInfo{
-			Name: col.Name,
-			Desc: col.Desc,
+			Name:     col.Name,
+			Desc:     col.Desc,
+			Validate: col.Validate,
+			Enum:     col.Enum,
+			Required: col.Required,
 		}
 
 		// Count populated and empty
@@ -311,6 +387,15 @@ func runColumnList(cmd *cobra.Command, args []string) error {
 				fmt.Printf("\n  %s\n", info.Name)
 				if info.Desc != "" {
 					fmt.Printf("    Description: %s\n", info.Desc)
+				}
+				if info.Validate != "" {
+					fmt.Printf("    Validate: %s\n", info.Validate)
+				}
+				if len(info.Enum) > 0 {
+					fmt.Printf("    Enum: %s\n", strings.Join(info.Enum, ", "))
+				}
+				if info.Required {
+					fmt.Printf("    Required: yes\n")
 				}
 				if len(records) > 0 {
 					fmt.Printf("    Populated: %d, Empty: %d\n", info.Populated, info.Empty)

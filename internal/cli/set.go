@@ -198,6 +198,24 @@ func runSet(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Validate the updates against column constraints (before getting record)
+	for fieldName, fieldValue := range updates {
+		col := stash.Columns.Find(fieldName)
+		if col != nil {
+			valResult := ValidateValue(col, fieldValue)
+			if !valResult.Valid && len(valResult.Errors) > 0 {
+				validErr := valResult.Errors[0]
+				ExitValidationError(validErr.Message,
+					map[string]interface{}{
+						"column": validErr.Column,
+						"value":  validErr.Value,
+						"rule":   validErr.Rule,
+					})
+				return nil
+			}
+		}
+	}
+
 	// AC-03: Get existing record
 	record, err := store.GetRecord(ctx.Stash, recordID)
 	if err != nil {

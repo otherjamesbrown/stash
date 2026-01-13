@@ -29,10 +29,13 @@ var columnNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{0,63}$`)
 
 // Column represents a user-defined column in a stash schema.
 type Column struct {
-	Name    string    `json:"name"`
-	Desc    string    `json:"desc,omitempty"`
-	Added   time.Time `json:"added"`
-	AddedBy string    `json:"added_by"`
+	Name     string    `json:"name"`
+	Desc     string    `json:"desc,omitempty"`
+	Added    time.Time `json:"added"`
+	AddedBy  string    `json:"added_by"`
+	Validate string    `json:"validate,omitempty"` // Validation type: "email", "url", "number", "date"
+	Enum     []string  `json:"enum,omitempty"`     // Allowed values for enum validation
+	Required bool      `json:"required,omitempty"` // Whether field is required
 }
 
 // ValidateColumnName checks if a column name is valid.

@@ -21,6 +21,11 @@ func resetFlags() {
 	// Reset set command flags
 	setColFlags = nil
 	setAutoCreate = false
+	// Reset column command flags
+	columnDesc = ""
+	columnValidate = ""
+	columnEnum = ""
+	columnRequired = false
 	// Reset show command flags
 	showWithFiles = false
 	showHistory = false

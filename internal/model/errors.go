@@ -20,5 +20,7 @@ var (
 	ErrEmptyValue       = errors.New("empty value not allowed")
 	ErrReservedColumn   = errors.New("reserved column name")
 	ErrInvalidColumn    = errors.New("invalid column name")
-	ErrHasChildren      = errors.New("record has children")
+	ErrHasChildren       = errors.New("record has children")
+	ErrValidationFailed  = errors.New("validation failed")
+	ErrInvalidValidation = errors.New("invalid validation type")
 )
