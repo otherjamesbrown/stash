@@ -58,6 +58,7 @@ usecases:
 | UC-QRY- | Querying (list, children, query, history) |
 | UC-IMP- | Import/export |
 | UC-SYN- | Sync, daemon, maintenance |
+| UC-STAT- | Field statistics and analysis |
 
 ## Acceptance Criteria Format
 

@@ -1,0 +1,240 @@
+feature: Field Statistics
+description: |
+  Commands for analyzing field distributions, data quality, and identifying
+  data issues without writing SQL. Agent-friendly for automated data profiling.
+
+dependencies:
+  - usecases/records.yaml
+  - usecases/columns.yaml
+
+usecases:
+  - id: UC-STAT-001
+    title: Field Distribution Statistics
+    interface: cli
+    status: planned
+
+    description: |
+      User wants to see the distribution of values for a specific field,
+      including value counts, NULL coverage, and basic statistics.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with records
+      - Target field exists as a column
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Show distribution for categorical field
+        given: Stash has 100 records with field "status" containing values "open", "closed", "pending"
+        when: User runs `stash stats status`
+        then:
+          - Shows total record count
+          - Shows count and percentage with value vs NULL
+          - Shows each unique value with count and percentage
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Show statistics for numeric field
+        given: Stash has 100 records with numeric field "price" (some NULL)
+        when: User runs `stash stats price`
+        then:
+          - Shows total record count
+          - Shows count and percentage with value vs NULL
+          - Shows min, max, mean, median
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Handle field with all NULL values
+        given: Stash has 50 records where field "notes" is NULL for all
+        when: User runs `stash stats notes`
+        then:
+          - Shows 0% coverage (all NULL)
+          - No distribution shown (no values)
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: JSON output for automation
+        given: Stash has records with field "category"
+        when: User runs `stash stats category --json`
+        then:
+          - Output is valid JSON object
+          - Contains field name, total count, null count, distribution array
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Limit number of values shown
+        given: Field "company_name" has 200 unique values
+        when: User runs `stash stats company_name --limit 10`
+        then:
+          - Shows top 10 values by count
+          - Indicates there are more values not shown
+          - Exit code is 0
+
+      - id: AC-06
+        criterion: Error on non-existent field
+        given: Stash has no column named "foo"
+        when: User runs `stash stats foo`
+        then:
+          - Error message indicates field does not exist
+          - Exit code is non-zero
+
+    in_scope:
+      - Value distribution for categorical fields
+      - Basic statistics for numeric fields (min, max, mean, median)
+      - NULL/coverage reporting
+      - Limiting output for high-cardinality fields
+      - JSON output for agents
+
+    out_of_scope:
+      - Histograms with custom bucket sizes
+      - Cross-field correlation analysis
+      - Time-series analysis
+
+    must_not:
+      - Modify any data
+      - Require the user to know SQL
+
+  - id: UC-STAT-002
+    title: Show Fields with Missing Values
+    interface: cli
+    status: planned
+
+    description: |
+      User wants to quickly identify which fields have missing (NULL) values
+      and how many records are affected.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with records
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: List all fields with NULL counts
+        given: Stash has 100 records across 5 columns with varying NULL counts
+        when: User runs `stash stats --missing`
+        then:
+          - Shows each column with NULL count and percentage
+          - Sorted by NULL count descending (worst first)
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Filter to only incomplete fields
+        given: Stash has 5 columns, 2 have NULLs, 3 are complete
+        when: User runs `stash stats --missing`
+        then:
+          - Only columns with at least one NULL are shown
+          - Complete columns are omitted
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: Show all fields including complete
+        given: Stash has 5 columns, some with NULLs, some complete
+        when: User runs `stash stats --missing --all`
+        then:
+          - All columns shown with NULL counts
+          - Complete columns show 0 NULLs
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: JSON output
+        given: Stash has columns with varying NULL counts
+        when: User runs `stash stats --missing --json`
+        then:
+          - Output is valid JSON array
+          - Each entry has column name, null_count, total_count, percentage
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Handle empty stash
+        given: Stash exists but has no records
+        when: User runs `stash stats --missing`
+        then:
+          - Indicates no records to analyze
+          - Exit code is 0
+
+    in_scope:
+      - Listing NULL counts per column
+      - Sorting by severity
+      - JSON output
+
+    out_of_scope:
+      - Suggesting values for NULLs
+      - Auto-filling missing values
+
+    must_not:
+      - Modify any data
+
+  - id: UC-STAT-003
+    title: Find Duplicate Values
+    interface: cli
+    status: planned
+
+    description: |
+      User wants to find records that share the same value in a field,
+      which may indicate data quality issues or duplicates.
+
+    actor: User
+
+    preconditions:
+      - Stash exists with records
+      - Target field exists as a column
+
+    acceptance_criteria:
+      - id: AC-01
+        criterion: Find duplicates in a field
+        given: Stash has records where "email" field has duplicates
+        when: User runs `stash stats --duplicates email`
+        then:
+          - Shows values that appear more than once
+          - Shows count for each duplicate value
+          - Exit code is 0
+
+      - id: AC-02
+        criterion: Show record IDs for duplicates
+        given: "email" field value "test@example.com" appears in 3 records
+        when: User runs `stash stats --duplicates email --show-ids`
+        then:
+          - Shows the duplicate value
+          - Lists the record IDs that share that value
+          - Exit code is 0
+
+      - id: AC-03
+        criterion: No duplicates found
+        given: All values in "email" field are unique
+        when: User runs `stash stats --duplicates email`
+        then:
+          - Message indicates no duplicates found
+          - Exit code is 0
+
+      - id: AC-04
+        criterion: JSON output
+        given: Stash has duplicate values in "company_name"
+        when: User runs `stash stats --duplicates company_name --json`
+        then:
+          - Output is valid JSON array
+          - Each entry has value, count, and optionally record IDs
+          - Exit code is 0
+
+      - id: AC-05
+        criterion: Limit results
+        given: Field has 50 different duplicate values
+        when: User runs `stash stats --duplicates company_name --limit 10`
+        then:
+          - Shows top 10 duplicates by count
+          - Exit code is 0
+
+    in_scope:
+      - Finding duplicate values in a single field
+      - Showing record IDs for duplicates
+      - JSON output
+
+    out_of_scope:
+      - Fuzzy/approximate duplicate detection
+      - Multi-field duplicate detection
+      - Automatic deduplication
+
+    must_not:
+      - Modify or delete any records
+      - Merge duplicates automatically
