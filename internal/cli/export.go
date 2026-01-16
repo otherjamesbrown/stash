@@ -21,6 +21,7 @@ var (
 	exportWhere          []string
 	exportIncludeDeleted bool
 	exportForce          bool
+	exportColumns        string
 )
 
 var exportCmd = &cobra.Command{
@@ -37,6 +38,7 @@ Examples:
   stash export products.json --format json  # Export all to JSON file
   stash export --format jsonl               # Export all to stdout (JSONL)
   stash export --where "Category=electronics"  # Export filtered records
+  stash export --columns "Name,Price"       # Export only specific columns
   stash export --include-deleted            # Include soft-deleted records`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runExport,
@@ -48,6 +50,7 @@ func init() {
 	exportCmd.Flags().StringArrayVar(&exportWhere, "where", nil, "Filter by field value (can be repeated)")
 	exportCmd.Flags().BoolVar(&exportIncludeDeleted, "include-deleted", false, "Include soft-deleted records")
 	exportCmd.Flags().BoolVarP(&exportForce, "force", "f", false, "Overwrite existing file without warning")
+	exportCmd.Flags().StringVar(&exportColumns, "columns", "", "Select specific columns to export (comma-separated)")
 	rootCmd.AddCommand(exportCmd)
 }
 
@@ -146,17 +149,27 @@ func runExport(cmd *cobra.Command, args []string) error {
 		defer writer.Close()
 	}
 
-	// Get column names
-	columnNames := stash.Columns.Names()
+	// Get column names - use selected columns or all columns
+	var columnNames []string
+	if exportColumns != "" {
+		for _, col := range strings.Split(exportColumns, ",") {
+			col = strings.TrimSpace(col)
+			if col != "" {
+				columnNames = append(columnNames, col)
+			}
+		}
+	} else {
+		columnNames = stash.Columns.Names()
+	}
 
 	// Export based on format
 	switch format {
 	case "csv":
 		err = exportCSV(writer, records, columnNames)
 	case "json":
-		err = exportJSON(writer, records)
+		err = exportJSON(writer, records, columnNames)
 	case "jsonl":
-		err = exportJSONL(writer, records)
+		err = exportJSONL(writer, records, columnNames)
 	}
 
 	if err != nil {
@@ -200,11 +213,17 @@ func exportCSV(w *os.File, records []*model.Record, columnNames []string) error 
 }
 
 // exportJSON writes records as a JSON array.
-func exportJSON(w *os.File, records []*model.Record) error {
-	// Build output structure (only user fields)
+func exportJSON(w *os.File, records []*model.Record, columnNames []string) error {
+	// Build output structure (only selected fields)
 	output := make([]map[string]interface{}, len(records))
 	for i, rec := range records {
-		output[i] = rec.Fields
+		filtered := make(map[string]interface{})
+		for _, col := range columnNames {
+			if val, ok := rec.Fields[col]; ok {
+				filtered[col] = val
+			}
+		}
+		output[i] = filtered
 	}
 
 	encoder := json.NewEncoder(w)
@@ -217,10 +236,16 @@ func exportJSON(w *os.File, records []*model.Record) error {
 }
 
 // exportJSONL writes records as newline-delimited JSON.
-func exportJSONL(w *os.File, records []*model.Record) error {
+func exportJSONL(w *os.File, records []*model.Record, columnNames []string) error {
 	encoder := json.NewEncoder(w)
 	for _, rec := range records {
-		if err := encoder.Encode(rec.Fields); err != nil {
+		filtered := make(map[string]interface{})
+		for _, col := range columnNames {
+			if val, ok := rec.Fields[col]; ok {
+				filtered[col] = val
+			}
+		}
+		if err := encoder.Encode(filtered); err != nil {
 			return fmt.Errorf("failed to write JSONL: %w", err)
 		}
 	}

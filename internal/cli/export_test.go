@@ -16,6 +16,7 @@ func resetExportFlags() {
 	exportWhere = nil
 	exportIncludeDeleted = false
 	exportForce = false
+	exportColumns = ""
 }
 
 // TestUC_IMP_002_ExportToFile tests UC-IMP-002: Export to File
@@ -442,6 +443,118 @@ func TestUC_IMP_002_ExportToFile(t *testing.T) {
 		// Then: Exit code is non-zero
 		if ExitCode == 0 {
 			t.Error("expected non-zero exit code when no stash exists")
+		}
+	})
+
+	t.Run("export with column selection", func(t *testing.T) {
+		// Given: Stash has records with multiple columns
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price", "Category"})
+		defer cleanup()
+
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Price=999", "--set", "Category=electronics"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+		rootCmd.SetArgs([]string{"add", "Mouse", "--set", "Price=50", "--set", "Category=electronics"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+		resetExportFlags()
+
+		// When: User runs `stash export --columns "Name,Price"`
+		outputFile := filepath.Join(tempDir, "selected.csv")
+		rootCmd.SetArgs([]string{"export", outputFile, "--columns", "Name,Price"})
+		err := rootCmd.Execute()
+
+		// Then: Only selected columns are exported
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		content, err := os.ReadFile(outputFile)
+		if err != nil {
+			t.Fatalf("failed to read output file: %v", err)
+		}
+
+		reader := csv.NewReader(strings.NewReader(string(content)))
+		records, err := reader.ReadAll()
+		if err != nil {
+			t.Fatalf("failed to parse CSV: %v", err)
+		}
+
+		// Should have header + 2 data rows
+		if len(records) != 3 {
+			t.Errorf("expected 3 rows (header + 2 records), got %d", len(records))
+		}
+
+		// Check header has only selected columns
+		if len(records[0]) != 2 {
+			t.Errorf("expected 2 columns, got %d", len(records[0]))
+		}
+		if records[0][0] != "Name" || records[0][1] != "Price" {
+			t.Errorf("expected header [Name, Price], got %v", records[0])
+		}
+
+		// Category should NOT be present
+		for _, row := range records {
+			for _, cell := range row {
+				if cell == "Category" || cell == "electronics" {
+					t.Error("Category column should not be exported")
+				}
+			}
+		}
+	})
+
+	t.Run("export JSON with column selection", func(t *testing.T) {
+		// Given: Stash has records with multiple columns
+		tempDir, cleanup := setupTestStashWithColumns(t, "inventory", "inv-", []string{"Name", "Price", "Category"})
+		defer cleanup()
+
+		rootCmd.SetArgs([]string{"add", "Laptop", "--set", "Price=999", "--set", "Category=electronics"})
+		rootCmd.Execute()
+		ExitCode = 0
+		resetFlags()
+		resetExportFlags()
+
+		// When: User runs `stash export --format json --columns "Name,Price"`
+		outputFile := filepath.Join(tempDir, "selected.json")
+		rootCmd.SetArgs([]string{"export", outputFile, "--format", "json", "--columns", "Name,Price"})
+		err := rootCmd.Execute()
+
+		// Then: Only selected columns are in JSON
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", ExitCode)
+		}
+
+		content, err := os.ReadFile(outputFile)
+		if err != nil {
+			t.Fatalf("failed to read output file: %v", err)
+		}
+
+		var records []map[string]interface{}
+		if err := json.Unmarshal(content, &records); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+
+		if len(records) != 1 {
+			t.Errorf("expected 1 record, got %d", len(records))
+		}
+
+		rec := records[0]
+		if _, ok := rec["Name"]; !ok {
+			t.Error("expected Name field in JSON")
+		}
+		if _, ok := rec["Price"]; !ok {
+			t.Error("expected Price field in JSON")
+		}
+		if _, ok := rec["Category"]; ok {
+			t.Error("Category should not be in JSON output")
 		}
 	})
 }
